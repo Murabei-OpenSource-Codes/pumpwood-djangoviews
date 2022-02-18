@@ -1,5 +1,7 @@
+"""Create views using Pumpwood pattern."""
 import os
 import pandas as pd
+import simplejson as json
 from io import BytesIO
 from django.conf import settings
 from django.http import HttpResponse
@@ -273,11 +275,17 @@ class PumpWoodRestService(viewsets.ViewSet):
             {service_model} : {service_model}' request.data['service_model']
                 not the same as self.service_model.__name__
         """
-        request_data = request.data
+        request_data: dict = None
+        if "application/json" in request.content_type.lower():
+            request_data = request.data
+        else:
+            request_data = request.data.dict()
+            for k in request_data.keys():
+                if k not in self.file_fields.keys():
+                    request_data[k] = json.loads(request_data[k])
 
         data_pk = request_data.get('pk')
         saved_obj = None
-
         for field in self.file_fields.keys():
             request_data.pop(field, None)
 
