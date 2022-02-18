@@ -13,7 +13,10 @@ with open(os.path.join(os.path.dirname(__file__), 'README.md')) as readme:
 requirements_path = os.path.join(
     os.path.dirname(__file__), 'requirements.txt')
 install_reqs = parse_requirements(requirements_path, session=False)
-reqs = [str(ir.req) for ir in install_reqs]
+try:
+    requirements = [str(ir.req) for ir in install_reqs]
+except Exception:
+    requirements = [str(ir.requirement) for ir in install_reqs]
 
 
 # allow setup.py to be run from any path
@@ -35,7 +38,7 @@ setuptools.setup(
         "Operating System :: OS Independent",
     ],
     package_dir={"": "src"},
-    install_requires=reqs,
+    install_requires=requirements,
     packages=setuptools.find_packages(where="src"),
     python_requires=">=3.6",
 )
