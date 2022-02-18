@@ -12,7 +12,7 @@ with open(os.path.join(os.path.dirname(__file__), 'README.md')) as readme:
 
 requirements_path = os.path.join(
     os.path.dirname(__file__), 'requirements.txt')
-install_reqs = parse_requirements(requirements_path)
+install_reqs = parse_requirements(requirements_path, session=False)
 reqs = [str(ir.req) for ir in install_reqs]
 
 
