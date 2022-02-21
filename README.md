@@ -17,7 +17,7 @@ to use
 PumpWoodRestService helps creating 
 
 ```
-from pumpwood_viewutils.views import PumpWoodRestService
+from .views import PumpWoodRestService
 
 class RestUser(PumpWoodRestService):
     """End-point with information about Pumpwood users."""

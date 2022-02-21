@@ -12,10 +12,10 @@ from werkzeug.utils import secure_filename
 from pumpwood_communication import exceptions
 from pumpwood_communication.serializers import PumpWoodJSONEncoder
 from django.db.models.fields import NOT_PROVIDED
-from pumpwood_viewutils.renderer import PumpwoodJSONRenderer
-from pumpwood_viewutils.query import filter_by_dict
-from pumpwood_viewutils.action import load_action_parameters
-from pumpwood_viewutils.aux.map_django_types import django_map
+from pumpwood_djangoviews.renderer import PumpwoodJSONRenderer
+from pumpwood_djangoviews.query import filter_by_dict
+from pumpwood_djangoviews.action import load_action_parameters
+from pumpwood_djangoviews.aux.map_django_types import django_map
 from django.db.models.fields.files import FieldFile
 
 

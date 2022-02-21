@@ -1,6 +1,6 @@
 Metadata-Version: 2.1
 Name: pumpwood-djangoviews
-Version: 0.2
+Version: 0.2.1
 Summary: Assist creating views for Django using Pumpwood pattern.
 Home-page: https://github.com/Murabei-OpenSource-Codes/pumpwood-djangoviews
 Author: Murabei Data Science
@@ -32,7 +32,7 @@ to use
 PumpWoodRestService helps creating 
 
 ```
-from pumpwood_viewutils.views import PumpWoodRestService
+from .views import PumpWoodRestService
 
 class RestUser(PumpWoodRestService):
     """End-point with information about Pumpwood users."""
