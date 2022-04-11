@@ -12,10 +12,10 @@ from werkzeug.utils import secure_filename
 from pumpwood_communication import exceptions
 from pumpwood_communication.serializers import PumpWoodJSONEncoder
 from django.db.models.fields import NOT_PROVIDED
-from .renderer import PumpwoodJSONRenderer
-from .query import filter_by_dict
-from .action import load_action_parameters
-from .aux.map_django_types import django_map
+from pumpwood_djangoviews.renderer import PumpwoodJSONRenderer
+from pumpwood_djangoviews.query import filter_by_dict
+from pumpwood_djangoviews.action import load_action_parameters
+from pumpwood_djangoviews.aux.map_django_types import django_map
 from django.db.models.fields.files import FieldFile
 
 
@@ -250,10 +250,12 @@ class PumpWoodRestService(viewsets.ViewSet):
                 "file_field must be set on self.file_fields dictionary.")
         obj = self.service_model.objects.get(id=pk)
 
-        file_path = getattr(obj, file_field)
-        if file_path is None:
+        file = getattr(obj, file_field)
+        if file is None:
             raise exceptions.PumpWoodObjectDoesNotExist(
                 "field [{}] not found at object".format(file_field))
+        else:
+            file_path = file.name
         setattr(obj, file_field, None)
         obj.save()
 
