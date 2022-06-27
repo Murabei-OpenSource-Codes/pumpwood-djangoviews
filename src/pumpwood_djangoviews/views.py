@@ -98,10 +98,22 @@ class PumpWoodRestService(viewsets.ViewSet):
             list_paginate_limit = limit or self.list_paginate_limit
 
             fields = request_data.pop("fields", None)
-            list_fields = fields or self.list_fields
+            default_fields = request_data.pop("default_fields", False)
+
+            # If field is set always return the requested fields.
+            if fields is not None:
+                list_fields = fields
+            # default_fields is True, return the ones specified by
+            # self.list_fields
+            elif default_fields:
+                list_fields = self.list_fields
+            # If default_fields not set return all object fields.
+            else:
+                list_fields = None
 
             arg_dict = {'query_set': self.service_model.objects.all()}
             arg_dict.update(request_data)
+            print("request_data:", request_data)
 
             query_set = filter_by_dict(**arg_dict)[:list_paginate_limit]
             return Response(self.serializer(
@@ -133,7 +145,18 @@ class PumpWoodRestService(viewsets.ViewSet):
         try:
             request_data = request.data
             fields = request_data.pop("fields", None)
-            list_fields = fields or self.list_fields
+            default_fields = request_data.pop("default_fields", False)
+
+            # If field is set always return the requested fields.
+            if fields is not None:
+                list_fields = fields
+            # default_fields is True, return the ones specified by
+            # self.list_fields
+            elif default_fields:
+                list_fields = self.list_fields
+            # If default_fields not set return all object fields.
+            else:
+                list_fields = None
 
             arg_dict = {'query_set': self.service_model.objects.all()}
             arg_dict.update(request_data)
