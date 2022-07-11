@@ -36,7 +36,7 @@ class PumpWoodRestService(viewsets.ViewSet):
     #####################
     # Route information #
     endpoint_description = None
-    dimentions = {}
+    dimensions = {}
     icon = None
     #####################
 
