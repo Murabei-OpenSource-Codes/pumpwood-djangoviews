@@ -113,9 +113,8 @@ class PumpWoodRestService(viewsets.ViewSet):
 
             arg_dict = {'query_set': self.service_model.objects.all()}
             arg_dict.update(request_data)
-            print("request_data:", request_data)
-
             query_set = filter_by_dict(**arg_dict)[:list_paginate_limit]
+
             return Response(self.serializer(
                 query_set, many=True, fields=list_fields).data)
         except TypeError as e:
