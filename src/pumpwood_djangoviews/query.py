@@ -1,5 +1,11 @@
-#!/usr/bin/python
-# -*- coding: utf-8 -*-
+"""
+Functions to run query at django using Pumpwood Rest API.
+"""
+from pumpwood_communication import exceptions
+from django.db.models.functions import Cast
+from django.db.models import F, TextField
+
+
 def filter_by_dict(query_set, filter_dict={}, exclude_dict={}, order_by=[]):
 	'''
 	Filter query set using function args as argument for filter ORM function.
@@ -20,7 +26,24 @@ def filter_by_dict(query_set, filter_dict={}, exclude_dict={}, order_by=[]):
 	:return: Filtered query set
 	:rtype: QuerySet
 	'''
-	return query_set.filter(
-		**filter_dict).exclude(
-		**exclude_dict).order_by(
-		*order_by)
+
+	for key in list(filter_dict.keys()):
+		# Check if JSON fields are being fetched and change key to django
+		# sintaxe
+		if "->" in key:
+			value = filter_dict.pop(key)
+			key = key.replace("->", "__")
+			filter_dict[key] = value
+
+	for key in list(exclude_dict.keys()):
+		# Check if JSON fields are being fetched and change key to django
+		# sintaxe
+		if "->" in key:
+			value = exclude_dict.pop(key)
+			key = key.replace("->", "__")
+			exclude_dict[key] = value
+
+	return query_set\
+		.filter(**filter_dict)\
+		.exclude(**exclude_dict)\
+		.order_by(*order_by)
