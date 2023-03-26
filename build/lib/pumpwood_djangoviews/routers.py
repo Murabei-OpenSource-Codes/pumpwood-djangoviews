@@ -48,14 +48,14 @@ class PumpWoodRouter(BaseRouter):
         ##############
         # Setting urls
         # List
-        url_list = '^{basename}/list/$'
+        url_list = '^rest/{basename}/list/$'
         resp_list.append(
             url(url_list.format(basename=basename),
                 viewset.as_view({'post': 'list'}),
                 name='rest__{basename}__list'.format(basename=basename)))
 
         # List without paginaiton
-        url_list_witout_pag = '^{basename}/list-without-pag/$'
+        url_list_witout_pag = '^rest/{basename}/list-without-pag/$'
         resp_list.append(
             url(url_list_witout_pag.format(basename=basename),
                 viewset.as_view({'post': 'list_without_pag'}),
@@ -63,14 +63,14 @@ class PumpWoodRouter(BaseRouter):
                     basename=basename)))
 
         # retrive
-        url_retrieve = '^{basename}/retrieve/(?P<pk>\d+)/$'
+        url_retrieve = '^rest/{basename}/retrieve/(?P<pk>\d+)/$'
         resp_list.append(
             url(url_retrieve.format(basename=basename),
                 viewset.as_view({'get': 'retrieve', 'delete': 'delete'}),
                 name='rest__{basename}__retrieve'.format(basename=basename)))
 
         # retrive file
-        url_retrieve = '^{basename}/retrieve-file/(?P<pk>\d+)/$'
+        url_retrieve = '^rest/{basename}/retrieve-file/(?P<pk>\d+)/$'
         resp_list.append(
             url(url_retrieve.format(basename=basename),
                 viewset.as_view({'get': 'retrieve_file'}),
@@ -78,7 +78,7 @@ class PumpWoodRouter(BaseRouter):
                     basename=basename)))
 
         # retrive file
-        url_retrieve = '^{basename}/remove-file-field/(?P<pk>\d+)/$'
+        url_retrieve = '^rest/{basename}/remove-file-field/(?P<pk>\d+)/$'
         resp_list.append(
             url(url_retrieve.format(basename=basename),
                 viewset.as_view({'delete': 'remove_file_field'}),
@@ -86,27 +86,27 @@ class PumpWoodRouter(BaseRouter):
                     basename=basename)))
 
         # delete
-        url_delete = '^{basename}/delete/(?P<pk>\d+)/$'
+        url_delete = '^rest/{basename}/delete/(?P<pk>\d+)/$'
         resp_list.append(
             url(url_delete.format(basename=basename),
                 viewset.as_view({'delete': 'delete'}),
                 name='rest__{basename}__delete'.format(basename=basename)))
 
-        url_delete = '^{basename}/delete/$'
+        url_delete = '^rest/{basename}/delete/$'
         resp_list.append(
             url(url_delete.format(basename=basename),
                 viewset.as_view({'post': 'delete_many'}),
                 name='rest__{basename}__delete_many'.format(
                     basename=basename)))
         # save
-        url_save = '^{basename}/save/$'
+        url_save = '^rest/{basename}/save/$'
         resp_list.append(
             url(url_save.format(basename=basename),
                 viewset.as_view({'post': 'save', 'put': 'save'}),
                 name='rest__{basename}__save'.format(basename=basename)))
 
         # actions list
-        url_actions_list = '^{basename}/actions/$'
+        url_actions_list = '^rest/{basename}/actions/$'
         resp_list.append(
             url(url_actions_list.format(basename=basename),
                 viewset.as_view({'get': 'list_actions'}),
@@ -114,7 +114,8 @@ class PumpWoodRouter(BaseRouter):
                     basename=basename)))
 
         # actions run with object
-        url_act_obj = '^{basename}/actions/(?P<action_name>\w+)/(?P<pk>\d+)/$'
+        url_act_obj = (
+            '^rest/{basename}/actions/(?P<action_name>\w+)/(?P<pk>\d+)/$')
         resp_list.append(
             url(
                 url_act_obj.format(basename=basename), viewset.as_view({
@@ -123,7 +124,7 @@ class PumpWoodRouter(BaseRouter):
                     basename=basename)))
 
         # actions run with object
-        url_act_static = '^{basename}/actions/(?P<action_name>\w+)/$'
+        url_act_static = '^rest/{basename}/actions/(?P<action_name>\w+)/$'
         resp_list.append(
             url(
                 url_act_static.format(basename=basename), viewset.as_view(
@@ -132,7 +133,7 @@ class PumpWoodRouter(BaseRouter):
                     basename=basename)))
 
         # options
-        url_options = '^{basename}/options/$'
+        url_options = '^rest/{basename}/options/$'
         resp_list.append(
             url(url_options.format(basename=basename),
                 viewset.as_view({
@@ -166,12 +167,12 @@ class PumpWoodDataBaseRouter(PumpWoodRouter):
             viewset, basename)
 
         resp_list.append(
-            url('^{basename}/pivot/$'.format(basename=basename),
+            url('^rest/{basename}/pivot/$'.format(basename=basename),
                 viewset.as_view({'post': 'pivot'}),
                 name='rest__{basename}__pivot'.format(basename=basename)))
 
         resp_list.append(
-            url('^{basename}/bulk-save/$'.format(basename=basename),
+            url('^rest/{basename}/bulk-save/$'.format(basename=basename),
                 viewset.as_view({'post': 'bulk_save'}),
                 name='rest__{basename}__bulk_save'.format(basename=basename)))
         return resp_list
