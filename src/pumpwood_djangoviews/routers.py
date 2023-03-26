@@ -6,7 +6,6 @@ from django.core.exceptions import ImproperlyConfigured
 from slugify import slugify
 from rest_framework.routers import BaseRouter
 from .views import PumpWoodRestService, PumpWoodDataBaseRestService
-from .serve import serve_X_Accel_protected, serve_X_Accel_unprotected
 from pumpwood_kong.kong_api import KongAPI
 
 
@@ -176,15 +175,3 @@ class PumpWoodDataBaseRouter(PumpWoodRouter):
                 viewset.as_view({'post': 'bulk_save'}),
                 name='rest__{basename}__bulk_save'.format(basename=basename)))
         return resp_list
-
-
-def url_serve_X_Accel_protected(prefix):
-    return [
-        url('^%s(?P<path>.*)$' % re.escape(prefix.lstrip('/')),
-            view=serve_X_Accel_protected)]
-
-
-def url_serve_X_Accel_unprotected(prefix):
-    return [
-        url('^%s(?P<path>.*)$' % re.escape(prefix.lstrip('/')),
-            view=serve_X_Accel_unprotected)]
