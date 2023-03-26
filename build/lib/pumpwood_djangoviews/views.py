@@ -2,6 +2,7 @@
 import os
 import pandas as pd
 import simplejson as json
+import datetime
 from io import BytesIO
 from django.conf import settings
 from django.http import HttpResponse
@@ -330,6 +331,8 @@ class PumpWoodRestService(viewsets.ViewSet):
 
         # Uploading files
         object_errors = {}
+        file_save_time = datetime.datetime.utcnow().strftime(
+            "%Y-%m-%dT%Hh%Mm%Ss")
         for field in self.file_fields.keys():
             field_errors = []
             if field in request.FILES:
@@ -340,7 +343,8 @@ class PumpWoodRestService(viewsets.ViewSet):
                     filename=file_name,
                     allowed_extensions=self.file_fields[field]))
 
-                filename = "{}___{}".format(saved_obj.id, file_name)
+                filename = "{}___{}___{}".format(
+                    saved_obj.id, file_save_time, file_name)
                 if len(field_errors) != 0:
                     object_errors[field] = field_errors
                 else:
