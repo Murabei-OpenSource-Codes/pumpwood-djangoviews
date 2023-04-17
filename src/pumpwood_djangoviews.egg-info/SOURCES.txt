@@ -10,6 +10,7 @@ src/pumpwood_djangoviews/renderer.py
 src/pumpwood_djangoviews/routers.py
 src/pumpwood_djangoviews/serializers.py
 src/pumpwood_djangoviews/views.py
+src/pumpwood_djangoviews/widgets.py
 src/pumpwood_djangoviews.egg-info/PKG-INFO
 src/pumpwood_djangoviews.egg-info/SOURCES.txt
 src/pumpwood_djangoviews.egg-info/dependency_links.txt

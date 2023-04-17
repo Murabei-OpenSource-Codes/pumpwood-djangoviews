@@ -344,7 +344,9 @@ class PumpWoodRestService(viewsets.ViewSet):
                     allowed_extensions=self.file_fields[field]))
 
                 filename = "{}___{}___{}".format(
-                    str(saved_obj.id).zfill(15), file_save_time, file_name)
+                    str(saved_obj.id).zfill(15),
+                    file_save_time,
+                    file_name)
                 if len(field_errors) != 0:
                     object_errors[field] = field_errors
                 else:
