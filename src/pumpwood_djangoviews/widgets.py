@@ -37,9 +37,12 @@ class PumpWoodForeignKeySelect(Select):
             order_by = [self.description_field]
         self.order_by = order_by
 
-        # Get choices from microservice
+    def render(self, name, value, attrs=None, renderer=None):
+        # Set choices for microservice
         self.choices = self.get_descriptions()
-
+        return super().render(
+            name=name, value=value, attrs=attrs,
+            renderer=renderer)
 
     def get_descriptions(self):
         self.microservice.login()
@@ -50,5 +53,4 @@ class PumpWoodForeignKeySelect(Select):
         final_result = [
             (r[self.pk_field], r[self.description_field])
             for r in optons_description]
-
         return final_result
