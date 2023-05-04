@@ -207,9 +207,9 @@ class PumpWoodRestService(viewsets.ViewSet):
         if isinstance(file_path, FieldFile):
             file_path = file_path.name
 
-        if file_path is None:
+        if not file_path:
             raise exceptions.PumpWoodObjectDoesNotExist(
-                "field [{}] not found at object".format(file_field))
+                "field [{}] is not set at object".format(file_field))
         file_data = self.storage_object.read_file(file_path)
         file_name = os.path.basename(file_path)
 
