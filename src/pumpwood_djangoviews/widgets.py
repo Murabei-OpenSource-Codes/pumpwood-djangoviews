@@ -1,5 +1,5 @@
 import os
-from django.forms import Select
+from django.forms import Select, FileField
 from pumpwood_communication.microservices import PumpWoodMicroService
 from pumpwood_communication.exceptions import PumpWoodException
 
