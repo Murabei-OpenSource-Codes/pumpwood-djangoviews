@@ -1,0 +1,27 @@
+{% if not widget.attrs.readonly_select %}
+    <select name="{{ widget.name }}"{% include "django/forms/widgets/attrs.html" %}>
+        {% for group_name, group_choices, group_index in widget.optgroups %}
+            {% if group_name %}
+                <optgroup label="{{ group_name }}">
+            {% endif %}
+
+            {% for option in group_choices %}
+                {% include option.template_name with widget=option %}
+            {% endfor %}
+
+            {% if group_name %}
+                </optgroup>
+            {% endif %}
+        {% endfor %}
+    </select>
+
+{% else %}
+  {% for group_name, group_choices, group_index in widget.optgroups %}
+      {% for option in group_choices %}
+          {% if widget.value.0|add:"0" == option.value %}
+              <input type="hidden" name="{{ widget.name }}" {% if widget.value != None %} value="{{ widget.value.0|stringformat:'s' }}" {% endif %}{% include "django/forms/widgets/attrs.html" %}>
+              {{ option.label }}
+          {% endif %}
+      {% endfor %}
+  {% endfor %}
+{% endif %}

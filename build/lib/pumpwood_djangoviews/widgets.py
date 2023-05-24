@@ -1,16 +1,22 @@
 import os
+import copy
 from django.forms import Select, FileField
 from pumpwood_communication.microservices import PumpWoodMicroService
 from pumpwood_communication.exceptions import PumpWoodException
+from django.template.loader import get_template
 
 
 class PumpWoodForeignKeySelect(Select):
+    template_name = 'pumpwood_views/foreign_key_select.html'
+    option_template_name = 'pumpwood_views/foreign_key_select_option.html'
+
     def __init__(self, model_class: str, microservice: PumpWoodMicroService,
                  description_field: str, pk_field: str = "pk",
                  filter_dict: dict = {}, exclude_dict: dict = {},
-                 order_by: list = None):
+                 order_by: list = None, attrs=None,
+                 widget_readonly: bool = False):
         """
-        __init__
+        __init__.
 
         Args:
             model_class [str]: Model class to search for foreign keys
@@ -31,18 +37,24 @@ class PumpWoodForeignKeySelect(Select):
         self.pk_field = pk_field
         self.filter_dict = filter_dict
         self.exclude_dict = exclude_dict
+        self.widget_readonly = widget_readonly
 
         # If order by not set, order using self.description_field
         if order_by is None:
             order_by = [self.description_field]
         self.order_by = order_by
+        super().__init__(attrs, choices=())
 
     def render(self, name, value, attrs=None, renderer=None):
         # Set choices for microservice
-        self.choices = self.get_descriptions()
-        return super().render(
-            name=name, value=value, attrs=attrs,
-            renderer=renderer)
+        fk_descriptions = self.get_descriptions()
+        self.choices = fk_descriptions
+        return super().render(name, value, attrs, renderer)
+
+    def get_context(self, name, value, attrs):
+        attrs["readonly_select"] = self.widget_readonly
+        context = super().get_context(name, value, attrs)
+        return context
 
     def get_descriptions(self):
         self.microservice.login()
