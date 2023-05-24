@@ -20,5 +20,5 @@ src/pumpwood_djangoviews.egg-info/requires.txt
 src/pumpwood_djangoviews.egg-info/top_level.txt
 src/pumpwood_djangoviews/aux/__init__.py
 src/pumpwood_djangoviews/aux/map_django_types.py
-src/pumpwood_djangoviews/templates/__init__.py
-src/pumpwood_djangoviews/templates/pumpwood_views/__init__.py
+src/pumpwood_djangoviews/templates/pumpwood_views/foreign_key_select.html
+src/pumpwood_djangoviews/templates/pumpwood_views/foreign_key_select_option.html
