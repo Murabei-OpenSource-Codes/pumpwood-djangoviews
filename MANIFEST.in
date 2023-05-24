@@ -1,18 +1,18 @@
-#documentation
-recursive-include docs/_build/html *
-
-#data used for clustering
-recursive-include vfclust/data *
-
-#phonetic representation
-include vfclust/t2p/t2p.c
-include vfclust/t2p/t2pin.tmp
-include vfclust/Makefile
-
-#example files
-include vfclust/example/EXAMPLE.*
-include vfclust/example/EXAMPLE_sem.*
-
 #Misc
 include CHANGES.txt
 include LICENSE.txt
+
+# Requirements
+include requirements.txt
+
+#documentation
+recursive-include docs/_build/html *
+
+# All package data
+recursive-include pumpwood_djangoviews/ *
+
+# Exclude some files
+recursive-exclude * *.pyc
+recursive-exclude * *.swp
+recursive-exclude * __pycache__
+recursive-exclude * *.db
