@@ -305,9 +305,8 @@ class PumpWoodRestService(viewsets.ViewSet):
             request_data = request.data
         else:
             request_data = request.data.dict()
-            for k in request_data.keys():
-                if k not in self.file_fields.keys():
-                    request_data[k] = json.loads(request_data[k])
+            json_data = json.loads(request_data.pop("__json__", '{}'))
+            request_data.update(json_data)
 
         data_pk = request_data.get('pk')
         saved_obj = None
