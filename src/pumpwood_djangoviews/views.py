@@ -305,8 +305,11 @@ class PumpWoodRestService(viewsets.ViewSet):
             request_data = request.data
         else:
             request_data = request.data.dict()
+            print("request_data:", request_data)
             json_data = json.loads(request_data.pop("__json__", '{}'))
+            print("json_data:", json_data)
             request_data.update(json_data)
+            print("request_data after:", request_data)
 
         data_pk = request_data.get('pk')
         saved_obj = None
