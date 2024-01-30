@@ -151,11 +151,12 @@ class PumpWoodRouter(BaseRouter):
 
 class PumpWoodDataBaseRouter(PumpWoodRouter):
     """
-    Define a Router for PumpWoodDataBaseRestService views
+    Define a Router for PumpWoodDataBaseRestService views.
 
     :raise ImproperlyConfigured: If a view different from
         PumpWoodDataBaseRestService is used
     """
+
     def validate_view(self, viewset):
         if PumpWoodDataBaseRestService not in viewset.__bases__:
             msg = ("PumpWoodRouter applied over a view that isn't a "
