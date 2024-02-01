@@ -139,6 +139,24 @@ class PumpWoodRouter(BaseRouter):
                 viewset.as_view({
                     'get': 'search_options', 'post': 'fill_options'}),
                 name='rest__{basename}__options'.format(basename=basename)))
+
+        url_options = '^rest/{basename}/list-options/$'
+        resp_list.append(
+            url(url_options.format(basename=basename),
+                viewset.as_view({
+                    'get': 'list_view_options'}),
+                name='rest__{basename}__list_options'.format(
+                    basename=basename)))
+
+        url_options = '^rest/{basename}/retrive-options/$'
+        resp_list.append(
+            url(url_options.format(basename=basename),
+                viewset.as_view({
+                    'get': 'retrieve_view_options',
+                    'post': 'fill_options_validation'}),
+                name='rest__{basename}__retrive_options'.format(
+                    basename=basename)))
+
         ##############
         return resp_list
 
@@ -151,11 +169,12 @@ class PumpWoodRouter(BaseRouter):
 
 class PumpWoodDataBaseRouter(PumpWoodRouter):
     """
-    Define a Router for PumpWoodDataBaseRestService views
+    Define a Router for PumpWoodDataBaseRestService views.
 
     :raise ImproperlyConfigured: If a view different from
         PumpWoodDataBaseRestService is used
     """
+
     def validate_view(self, viewset):
         if PumpWoodDataBaseRestService not in viewset.__bases__:
             msg = ("PumpWoodRouter applied over a view that isn't a "

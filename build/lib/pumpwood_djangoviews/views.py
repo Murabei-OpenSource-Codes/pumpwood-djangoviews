@@ -4,14 +4,12 @@ import pandas as pd
 import simplejson as json
 import datetime
 from io import BytesIO
-from django.conf import settings
+from typing import List
 from django.http import HttpResponse
-from rest_framework.parsers import JSONParser
 from rest_framework import viewsets, status
 from rest_framework.response import Response
 from werkzeug.utils import secure_filename
 from pumpwood_communication import exceptions
-from pumpwood_communication.serializers import PumpWoodJSONEncoder
 from django.db.models.fields import NOT_PROVIDED
 from pumpwood_djangoviews.renderer import PumpwoodJSONRenderer
 from pumpwood_djangoviews.query import filter_by_dict
@@ -48,13 +46,40 @@ class PumpWoodRestService(viewsets.ViewSet):
 
     # List fields
     serializer = None
-    list_fields = None
     foreign_keys = {}
     file_fields = {}
 
     # Front-end uses 50 as limit to check if all data have been fetched,
     # if change this parameter, be sure to update front-end list component.
     list_paginate_limit = 50
+
+    #######
+    # Gui #
+    list_fields = None
+    gui_retrieve_fieldset: dict = None
+    gui_verbose_field: str = 'pk'
+    gui_readonly: List[str] = []
+    #######
+
+    ########################
+    # Get class attributes #
+    def get_gui_retrieve_fieldset(self):
+        """Return gui_retrieve_fieldset attribute."""
+        # Set pk as verbose field if none is set
+        return self.gui_retrieve_fieldset
+
+    def get_gui_verbose_field(self):
+        """Return gui_verbose_field attribute."""
+        return self.gui_verbose_field
+
+    def get_gui_readonly(self):
+        """Return gui_readonly attribute."""
+        return self.gui_readonly
+
+    def get_list_fields(self):
+        """Return list_fields attribute."""
+        return self.list_fields
+    ########################
 
     @staticmethod
     def _allowed_extension(filename, allowed_extensions):
@@ -496,7 +521,7 @@ class PumpWoodRestService(viewsets.ViewSet):
             'parameters': parameters, 'object': object_dict})
 
     @classmethod
-    def cls_search_options(cls):
+    def cls_fields_options(cls):
         fields = cls.service_model._meta.get_fields()
         all_info = {}
         # f = fields[10]
@@ -633,7 +658,7 @@ class PumpWoodRestService(viewsets.ViewSet):
         .. note::
             Must be implemented
         """
-        return Response(self.cls_search_options())
+        return Response(self.cls_fields_options())
 
     def fill_options(self, request):
         """
@@ -646,7 +671,116 @@ class PumpWoodRestService(viewsets.ViewSet):
         .. note::
             Must be implemented
         """
-        return Response(self.cls_search_options())
+        return Response(self.cls_fields_options())
+
+    def list_view_options(self, request) -> dict:
+        """
+        Return information to render list views on frontend.
+
+        Args:
+            No args.
+        Kwargs:
+            No Kwargs.
+        Return [dict]:
+            Return a dictionary with keys:
+            - list_fields[List[str]]: Return a list of fields that should be
+                redendered on list view.
+            - field_type [dict]: Return information for each column to
+                render search filters on frontend.
+        """
+        list_fields = self.get_list_fields()
+        fields_options = self.cls_fields_options()
+        return Response({
+            "default_list_fields": list_fields,
+            "field_descriptions": fields_options})
+
+    def retrieve_view_options(self, request) -> dict:
+        """
+        Return information to correctly create retrieve view.
+
+        Field set are set using gui_retrieve_fieldset attribute of the
+        class. It is used classes to define each fieldset.
+
+        Args:
+            No Args.
+        Kwargs:
+            No Kwargs.
+        Return [dict]:
+            Return a dictonary with information to render retrieve
+            views on front-ends. Keys:
+             - fieldset [dict]: A dictionary with inline tabs names as
+                key and fields that will be redendered.
+
+            Exemple:
+            {
+                "fieldset": {
+                    "Nome da tab. 1": {
+                        "fields": ["field1", "field2", "field3"]
+                    },
+                    "Nome da tab. 2": {
+                        "fields": ["field1"]
+                    }
+                }
+            }
+        """
+        gui_retrieve_fieldset = self.get_gui_retrieve_fieldset()
+        gui_verbose_field = self.get_gui_verbose_field()
+
+        # If gui_retrieve_fieldset is not set return all columns
+        # on the main tab
+        if gui_retrieve_fieldset is None:
+            fields_options = self.cls_fields_options()
+            all_columns = set(fields_options.keys())
+            all_columns = list(all_columns - {'pk', 'model_class'})
+            all_columns.sort()
+            return {
+                "verbose_field": gui_verbose_field,
+                "fieldset": {
+                    None: {
+                        "fields": all_columns
+                    }
+                }
+            }
+        return Response({
+            "verbose_field": gui_verbose_field,
+            "fieldset": gui_retrieve_fieldset})
+
+    def fill_options_validation(self, request) -> dict:
+        """
+        Return fill options for retrieve/save pages.
+
+        It will validate partial data fill and return erros if necessary.
+
+        Args:
+            partial_data [dict]: Partially filled data to be validated by
+                the backend.
+
+        Kwargs:
+            user_type[str]: Must be in ['api', 'gui']. It will return the
+                options according to interface user is using. When requesting
+                using gui, self.gui_readonly field will be setted as read-only.
+            field [str]: Set to validade an specific field. If not set all
+                fields will be validated.
+        Return [dict]:
+            Return a dictionary
+        """
+        user_type: str = request.query_params.get('user_type', 'api')
+        field: str = request.query_params.get('field', 'field')
+        partial_data = request.data
+
+        gui_readonly = self.get_gui_readonly()
+        fill_options = self.cls_fields_options()
+
+        # If it is gui interface then set gui_readonly as read-only
+        # this will limit fields that are not read-only but should not
+        # be edited be the user
+        if user_type == 'gui':
+            for key, item in fill_options.items():
+                item["read_only"] = key in gui_readonly
+
+        return Response({
+            "field_descriptions": fill_options,
+            "gui_readonly": gui_readonly})
 
 
 class PumpWoodDataBaseRestService(PumpWoodRestService):
