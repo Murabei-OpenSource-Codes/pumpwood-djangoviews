@@ -16,6 +16,7 @@ from pumpwood_djangoviews.query import filter_by_dict
 from pumpwood_djangoviews.action import load_action_parameters
 from pumpwood_djangoviews.aux.map_django_types import django_map
 from django.db.models.fields.files import FieldFile
+from pumpwood_i8n.singletons import pumpwood_i8n as _
 
 
 def save_serializer_instance(serializer_instance):
@@ -422,23 +423,28 @@ class PumpWoodRestService(viewsets.ViewSet):
         """Get all actions with action decorator."""
         # this import works here only
         import inspect
+        print("get_actions")
         function_dict = dict(inspect.getmembers(
             self.service_model, predicate=inspect.isfunction))
         method_dict = dict(inspect.getmembers(
             self.service_model, predicate=inspect.ismethod))
         method_dict.update(function_dict)
         actions = {
-            name: func for name,
-            func in method_dict.items()
+            name: func for name, func in method_dict.items()
             if getattr(func, 'is_action', False)}
         return actions
 
     def list_actions(self, request):
         """List model exposed actions."""
         actions = self.get_actions()
-        action_descriptions = [
-            action.action_object.to_dict()
-            for name, action in actions.items()]
+        action_descriptions = []
+        for name, action in actions.items():
+            action_dict = action.action_object.to_dict()
+            action_dict["action_name__verbose"] = \
+                _.t(action_dict["action_name"])
+            action_dict["info__verbose"] = \
+                _.t(action_dict["info"])
+            action_descriptions.append(action_dict)
         return Response(action_descriptions)
 
     def list_actions_with_objects(self, request):

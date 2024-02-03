@@ -4,9 +4,7 @@ from rest_framework import serializers
 
 
 class ClassNameField(serializers.Field):
-    """
-    Serializer Field that returns model name
-    """
+    """Serializer Field that returns model name."""
     def __init__(self, **kwargs):
         kwargs['read_only'] = True
         super(ClassNameField, self).__init__(**kwargs)
@@ -33,10 +31,11 @@ class ClassNameField(serializers.Field):
 
 class CustomChoiceTypeField(serializers.Field):
     """
-    Serializer field for ChoiceTypeField, returns a tupple with both real
-    value on [0] and get_{field_name}_display on [1].
-    to_internal_value uses only de first value os the tupple if a tupple, or
-    just the value if not a tupple.
+    Serializer field for ChoiceTypeField.
+
+    Returns a tupple with both real value on [0] and get_{field_name}_display
+    on [1]. to_internal_value uses only de first value os the tupple
+    if a tupple, or just the value if not a tupple.
     """
 
     def __init__(self, field_name=None, **kwargs):
@@ -141,7 +140,6 @@ class DynamicFieldsModelSerializer(serializers.ModelSerializer):
 
         # Instantiate the superclass normally
         super(DynamicFieldsModelSerializer, self).__init__(*args, **kwargs)
-
         if fields is not None:
             # Drop any fields that are not specified in the `fields` argument.
             allowed = set(fields)
