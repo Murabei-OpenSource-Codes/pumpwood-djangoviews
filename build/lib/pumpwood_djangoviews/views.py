@@ -438,12 +438,25 @@ class PumpWoodRestService(viewsets.ViewSet):
         """List model exposed actions."""
         actions = self.get_actions()
         action_descriptions = []
+        translation_tag_template = "{model_class}__action__{action}"
+        model_class = self.service_model.__name__
         for name, action in actions.items():
             action_dict = action.action_object.to_dict()
-            action_dict["action_name__verbose"] = \
-                _.t(action_dict["action_name"])
-            action_dict["info__verbose"] = \
-                _.t(action_dict["info"])
+            tag = translation_tag_template.format(
+                model_class=model_class,
+                action=action_dict["action_name"])
+
+            #########################################################
+            # Translate action_name and info to end-user at verbose #
+            action_dict["action_name__verbose"] = _.t(
+                sentence=action_dict["action_name"], tag=tag + "__action_name")
+            action_dict["info__verbose"] = _.t(
+                sentence=action_dict["info"], tag=tag + "__info")
+            for key, item in action_dict["parameters"].items():
+                item["verbose_name"] = _.t(
+                    sentence=key, tag=tag + "__parameters")
+            #########################################################
+
             action_descriptions.append(action_dict)
         return Response(action_descriptions)
 
@@ -529,8 +542,9 @@ class PumpWoodRestService(viewsets.ViewSet):
     @classmethod
     def cls_fields_options(cls):
         fields = cls.service_model._meta.get_fields()
+        model_class = cls.service_model.__name__
+        translation_tag_template = "{model_class}__fields__{field}"
         all_info = {}
-        # f = fields[10]
         for f in fields:
             column_info = {}
 
@@ -571,10 +585,18 @@ class PumpWoodRestService(viewsets.ViewSet):
             else:
                 column = f.column
 
+            tag = translation_tag_template.format(
+                model_class=model_class, field=column)
+            column__verbose = _.t(
+                sentence=column, tag=tag + "__column")
+            help_text__verbose = _.t(
+                sentence=help_text, tag=tag + "__help_text")
             column_info = {
                 'primary_key': primary_key,
                 "column": column,
-                "doc_string": help_text,
+                "column__verbose": column__verbose,
+                "help_text": help_text,
+                "help_text__verbose": help_text__verbose,
                 "type": python_type,
                 "nullable": f.null,
                 "default": default,
@@ -585,9 +607,13 @@ class PumpWoodRestService(viewsets.ViewSet):
             choices = getattr(f, "choices", None)
             if choices is not None:
                 column_info["type"] = "options"
-                column_info["in"] = [
-                    {"value": choice[0], "description": choice[1]}
-                    for choice in choices]
+                in_list = []
+                for choice in choices:
+                    description = _.t(
+                        sentence=choice[1], tag=tag + "__choices")
+                    in_list.append({
+                        "value": choice[0], "description": description})
+                column_info["in"] = in_list
 
             # Set autoincrement for primary keys
             if primary_key:

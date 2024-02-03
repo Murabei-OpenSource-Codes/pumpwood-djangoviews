@@ -1,4 +1,5 @@
 Shapely>=1.7.0
 geopandas>=0.8.1
 pandas
+pumpwood-i8n>=0.1
 simplejson
