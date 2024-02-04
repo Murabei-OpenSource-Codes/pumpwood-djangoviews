@@ -423,7 +423,6 @@ class PumpWoodRestService(viewsets.ViewSet):
         """Get all actions with action decorator."""
         # this import works here only
         import inspect
-        print("get_actions")
         function_dict = dict(inspect.getmembers(
             self.service_model, predicate=inspect.isfunction))
         method_dict = dict(inspect.getmembers(
