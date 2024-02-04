@@ -1,12 +1,10 @@
 """Define defult Routers for Pumpwood systems."""
-import re
 import os
 from django.conf.urls import url
 from django.core.exceptions import ImproperlyConfigured
 from slugify import slugify
 from rest_framework.routers import BaseRouter
 from .views import PumpWoodRestService, PumpWoodDataBaseRestService
-from pumpwood_kong.kong_api import KongAPI
 
 
 class PumpWoodRouter(BaseRouter):

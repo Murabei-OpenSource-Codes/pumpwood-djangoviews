@@ -3,6 +3,7 @@ import os
 import pandas as pd
 import simplejson as json
 import datetime
+import pumpwood_djangoauth.i8n.translate as _
 from io import BytesIO
 from typing import List
 from django.http import HttpResponse
@@ -16,7 +17,6 @@ from pumpwood_djangoviews.query import filter_by_dict
 from pumpwood_djangoviews.action import load_action_parameters
 from pumpwood_djangoviews.aux.map_django_types import django_map
 from django.db.models.fields.files import FieldFile
-from pumpwood_i8n.singletons import pumpwood_i8n as _
 
 
 def save_serializer_instance(serializer_instance):
