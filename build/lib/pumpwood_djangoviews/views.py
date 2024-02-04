@@ -24,7 +24,9 @@ def save_serializer_instance(serializer_instance):
     if is_valid:
         return serializer_instance.save()
     else:
-        raise exceptions.PumpWoodException(serializer_instance.errors)
+        raise exceptions.PumpWoodException(
+            message="Error when validating fields for saving object",
+            payload=serializer_instance.errors)
 
 
 class PumpWoodRestService(viewsets.ViewSet):
