@@ -920,7 +920,10 @@ class PumpWoodDataBaseRestService(PumpWoodRestService):
                 'Post payload must have data_to_save key.')
 
         if len(self.expected_cols_bulk_save) == 0:
-            raise exceptions.PumpWoodException('Bulk save not avaiable.')
+            msg = (
+                "Bulk save not avaiable. Set expected_cols_bulk_save on "
+                "PumpWoodDataBaseRestService View to habilitate funciton.")
+            raise exceptions.PumpWoodException(msg)
 
         pd_data_to_save = pd.DataFrame(data_to_save)
         pd_data_cols = set(list(pd_data_to_save.columns))
