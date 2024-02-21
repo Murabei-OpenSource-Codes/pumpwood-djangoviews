@@ -849,6 +849,10 @@ class PumpWoodDataBaseRestService(PumpWoodRestService):
         :return: Return database data pivoted acording to columns parameter
         :rtyoe: panas.Dataframe converted to disctionary
         """
+        if self.model_variables is None:
+            msg = "Pivot is not avaiable, set model_variables at view"
+            raise exceptions.PumpWoodException(msg)
+
         columns = request.data.get('columns', [])
         format = request.data.get('format', 'list')
         model_variables = request.data.get('variables')
