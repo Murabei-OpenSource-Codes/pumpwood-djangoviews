@@ -11,6 +11,7 @@ src/pumpwood_djangoviews/renderer.py
 src/pumpwood_djangoviews/routers.py
 src/pumpwood_djangoviews/serializers.py
 src/pumpwood_djangoviews/storage.py
+src/pumpwood_djangoviews/utils.py
 src/pumpwood_djangoviews/views.py
 src/pumpwood_djangoviews/widgets.py
 src/pumpwood_djangoviews.egg-info/PKG-INFO
