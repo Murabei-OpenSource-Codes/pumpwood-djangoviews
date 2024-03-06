@@ -545,6 +545,10 @@ class PumpWoodRestService(viewsets.ViewSet):
         fields = cls.service_model._meta.get_fields()
         model_class = cls.service_model.__name__
         translation_tag_template = "{model_class}__fields__{field}"
+
+        # Get read-only fields from serializer
+        read_only_fields = getattr(cls.serializer.Meta, "read_only", [])
+
         all_info = {}
         for f in fields:
             column_info = {}
@@ -602,7 +606,8 @@ class PumpWoodRestService(viewsets.ViewSet):
                 "nullable": f.null,
                 "default": default,
                 "indexed": db_index or primary_key,
-                "unique": unique}
+                "unique": unique,
+                "read_only": column in read_only_fields}
 
             # Get choice options if avaiable
             choices = getattr(f, "choices", None)
@@ -663,7 +668,8 @@ class PumpWoodRestService(viewsets.ViewSet):
                 "nullable": null,
                 "default": default,
                 "indexed": db_index or primary_key,
-                "unique": unique}
+                "unique": unique,
+                "read_only": key in read_only_fields}
 
             if isinstance(item, dict):
                 column_info["model_class"] = item["model_class"]
@@ -678,7 +684,6 @@ class PumpWoodRestService(viewsets.ViewSet):
                         key=key, model=str(cls.service_model))
                 raise Exception(msg)
             all_info[key] = column_info
-
         return all_info
 
     def search_options(self, request):
@@ -809,7 +814,8 @@ class PumpWoodRestService(viewsets.ViewSet):
         # be edited be the user
         if user_type == 'gui':
             for key, item in fill_options.items():
-                item["read_only"] = key in gui_readonly
+                if key in gui_readonly:
+                    item["read_only"] = True
 
         return Response({
             "field_descriptions": fill_options,

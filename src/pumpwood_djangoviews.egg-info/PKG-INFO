@@ -1,6 +1,6 @@
 Metadata-Version: 2.1
 Name: pumpwood-djangoviews
-Version: 0.34
+Version: 0.35
 Summary: Assist creating views for Django using Pumpwood pattern.
 Home-page: https://github.com/Murabei-OpenSource-Codes/pumpwood-djangoviews
 Author: Murabei Data Science
@@ -11,11 +11,6 @@ Classifier: Operating System :: OS Independent
 Requires-Python: >=3.6
 Description-Content-Type: text/markdown
 License-File: LICENSE
-Requires-Dist: simplejson
-Requires-Dist: pandas
-Requires-Dist: Shapely>=1.7.0
-Requires-Dist: geopandas>=0.8.1
-Requires-Dist: pumpwood-i8n>=0.1
 
 # PumpWood Django Views
 Assists creation of django views in a Pumpwood pattern. It make it possible
