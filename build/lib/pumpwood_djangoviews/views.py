@@ -198,11 +198,11 @@ class PumpWoodRestService(viewsets.ViewSet):
 
     def retrieve(self, request, pk=None):
         """
-        Retrieve view, uses the retrive_serializer to return object with pk.
+        Retrieve view, uses the retrieve_serializer to return object with pk.
 
         :param int pk: Object pk to be retrieve
         :return: The representation of the object passed by
-                 self.retrive_serializer
+                 self.retrieve_serializer
         :rtype: dict
         """
         obj = self.service_model.objects.get(pk=pk)
@@ -323,7 +323,7 @@ class PumpWoodRestService(viewsets.ViewSet):
         Object will be updated if request.data['pk'] is not None.
 
         :param dict request.data: Object representation as
-            self.retrive_serializer
+            self.retrieve_serializer
         :raise PumpWoodException: 'Object model class diferent from
             {service_model} : {service_model}' request.data['service_model']
                 not the same as self.service_model.__name__

@@ -146,7 +146,7 @@ class PumpWoodRouter(BaseRouter):
                 name='rest__{basename}__list_options'.format(
                     basename=basename)))
 
-        url_options = '^rest/{basename}/retrive-options/$'
+        url_options = '^rest/{basename}/retrieve-options/$'
         resp_list.append(
             url(url_options.format(basename=basename),
                 viewset.as_view({
