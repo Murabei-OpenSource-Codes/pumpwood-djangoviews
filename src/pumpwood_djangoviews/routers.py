@@ -60,14 +60,14 @@ class PumpWoodRouter(BaseRouter):
                 name='rest__{basename}__list_without_pag'.format(
                     basename=basename)))
 
-        # retrive
+        # retrieve
         url_retrieve = '^rest/{basename}/retrieve/(?P<pk>\d+)/$'
         resp_list.append(
             url(url_retrieve.format(basename=basename),
                 viewset.as_view({'get': 'retrieve', 'delete': 'delete'}),
                 name='rest__{basename}__retrieve'.format(basename=basename)))
 
-        # retrive file
+        # retrieve file
         url_retrieve = '^rest/{basename}/retrieve-file/(?P<pk>\d+)/$'
         resp_list.append(
             url(url_retrieve.format(basename=basename),
@@ -75,7 +75,7 @@ class PumpWoodRouter(BaseRouter):
                 name='rest__{basename}__retrieve_file'.format(
                     basename=basename)))
 
-        # retrive file
+        # retrieve file
         url_retrieve = '^rest/{basename}/remove-file-field/(?P<pk>\d+)/$'
         resp_list.append(
             url(url_retrieve.format(basename=basename),
@@ -152,7 +152,7 @@ class PumpWoodRouter(BaseRouter):
                 viewset.as_view({
                     'get': 'retrieve_view_options',
                     'post': 'fill_options_validation'}),
-                name='rest__{basename}__retrive_options'.format(
+                name='rest__{basename}__retrieve_options'.format(
                     basename=basename)))
 
         ##############
