@@ -4,6 +4,7 @@ import pandas as pd
 import simplejson as json
 import datetime
 import pumpwood_djangoauth.i8n.translate as _
+import copy
 from io import BytesIO
 from typing import List
 from django.http import HttpResponse
@@ -607,7 +608,8 @@ class PumpWoodRestService(viewsets.ViewSet):
                 "default": default,
                 "indexed": db_index or primary_key,
                 "unique": unique,
-                "read_only": column in read_only_fields}
+                "read_only": column in read_only_fields,
+                "extra_info": {}}
 
             # Get choice options if avaiable
             choices = getattr(f, "choices", None)
@@ -632,58 +634,111 @@ class PumpWoodRestService(viewsets.ViewSet):
             if file_field is not None:
                 column_info["type"] = "file"
                 column_info["permited_file_types"] = file_field
-
             all_info[column] = column_info
 
-        # Adding description for foreign keys
+        #############################################
+        # Adding field description for foreign keys #
         for key, item in cls.foreign_keys.items():
+            if not isinstance(item, dict):
+                msg = (
+                    "View foreign_key items must be dictonary, view "
+                    "of model [{model}] not correctly configured").format(
+                        model=str(cls.service_model))
+                raise Exception(msg)
+
             column = getattr(cls.service_model, key, None)
-            if column is None:
-                msg = (
-                    "Foreign Key incorrectly configured at Pumpwood View. "
-                    "[{key}] not found on [{model}]").format(
-                        key=key, model=str(cls.service_model))
-                raise Exception(msg)
+            many = item.get("many", False)
 
-            primary_key = getattr(column.field, "primary_key", False)
-            help_text = str(getattr(column.field, "help_text", ""))
-            db_index = getattr(column.field, "db_index", False)
-            unique = getattr(column.field, "unique", False)
-            null = getattr(column.field, "null", False)
+            # Tag for i8s translation
+            tag = translation_tag_template.format(
+                model_class=model_class, field=column)
 
-            # Getting default value
-            default = None
-            f_default = getattr(f, 'default', None)
-            if f_default != NOT_PROVIDED and f_default is not None:
-                if callable(f_default):
-                    default = f_default()
-                else:
-                    default = f_default
+            ######################################
+            # Description for foreign key fields #
+            if not many:
+                if column is None:
+                    msg = (
+                        "Foreign Key incorrectly configured at Pumpwood View. "
+                        "[{key}] not found on [{model}]").format(
+                            key=key, model=str(cls.service_model))
+                    raise Exception(msg)
 
-            column_info = {
-                'primary_key': primary_key,
-                "column": key,
-                "doc_string": help_text,
-                "type": "foreign_key",
-                "nullable": null,
-                "default": default,
-                "indexed": db_index or primary_key,
-                "unique": unique,
-                "read_only": key in read_only_fields}
+                primary_key = getattr(column.field, "primary_key", False)
+                help_text = str(getattr(column.field, "help_text", ""))
+                db_index = getattr(column.field, "db_index", False)
+                unique = getattr(column.field, "unique", False)
+                null = getattr(column.field, "null", False)
 
-            if isinstance(item, dict):
-                column_info["model_class"] = item["model_class"]
-                column_info["many"] = item["many"]
-            elif isinstance(item, str):
-                column_info["model_class"] = item
-                column_info["many"] = False
+                # Getting default value
+                default = None
+                f_default = getattr(f, 'default', None)
+                if f_default != NOT_PROVIDED and f_default is not None:
+                    if callable(f_default):
+                        default = f_default()
+                    else:
+                        default = f_default
+
+                column__verbose = _.t(
+                    sentence=key, tag=tag + "__column")
+                help_text__verbose = _.t(
+                    sentence=help_text, tag=tag + "__help_text")
+                column_info = {
+                    'primary_key': primary_key,
+                    "column": key,
+                    'column__verbose': column__verbose,
+                    "help_text": help_text,
+                    'help_text__verbose': help_text__verbose,
+                    "type": "foreign_key",
+                    "nullable": null,
+                    "default": default,
+                    "indexed": db_index or primary_key,
+                    "unique": unique,
+                    "read_only": key in read_only_fields,
+                    "extra_info": copy.deepcopy(item)}
+                all_info[key] = column_info
+
+            ##################################
+            # Description for related fields #
             else:
-                msg = (
-                    "foreign_key not correctly defined, check column"
-                    "[{key}] from model [{model}]").format(
-                        key=key, model=str(cls.service_model))
-                raise Exception(msg)
-            all_info[key] = column_info
+                help_text = key
+                db_index = False
+                unique = False
+                null = False
+                read_only = False
+
+                # If column is present on django (related fields), use column
+                # definition
+                if column is not None:
+                    primary_key = getattr(column.field, "primary_key", False)
+                    help_text = str(getattr(column.field, "help_text", ""))
+                    db_index = getattr(column.field, "db_index", False)
+                    unique = getattr(column.field, "unique", False)
+                    null = getattr(column.field, "null", False)
+
+                # Check if in definition of foreign_key there is any
+                # information to overide columns details
+                help_text = item.get("help_text", help_text)
+                db_index = item.get("db_index", db_index)
+                unique = item.get("unique", unique)
+                null = item.get("null", null)
+                read_only = item.get("read_only", read_only)
+
+                column__verbose = _.t(
+                    sentence=key, tag=tag + "__column")
+                help_text__verbose = _.t(
+                    sentence=help_text, tag=tag + "__help_text")
+                all_info[key] = {
+                    "primary_key": False,
+                    "column": key,
+                    "column__verbose": column__verbose,
+                    "help_text": help_text,
+                    "help_text__verbose": help_text__verbose,
+                    "type": "related_model",
+                    "nullable": False,
+                    "read_only": read_only,
+                    "default": None,
+                    "unique": False,
+                    "extra_info": copy.deepcopy(item)}
         return all_info
 
     def search_options(self, request):
