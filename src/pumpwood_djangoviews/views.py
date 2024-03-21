@@ -548,7 +548,7 @@ class PumpWoodRestService(viewsets.ViewSet):
         translation_tag_template = "{model_class}__fields__{field}"
 
         # Get read-only fields from serializer
-        read_only_fields = getattr(cls.serializer.Meta, "read_only", [])
+        read_only_fields = getattr(cls.serializer.Meta, "read_only_fields", [])
 
         all_info = {}
         for f in fields:
