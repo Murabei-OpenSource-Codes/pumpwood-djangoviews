@@ -651,7 +651,7 @@ class PumpWoodRestService(viewsets.ViewSet):
 
             # Tag for i8s translation
             tag = translation_tag_template.format(
-                model_class=model_class, field=column)
+                model_class=model_class, field=key)
 
             ######################################
             # Description for foreign key fields #
