@@ -615,12 +615,13 @@ class PumpWoodRestService(viewsets.ViewSet):
             choices = getattr(f, "choices", None)
             if choices is not None:
                 column_info["type"] = "options"
-                in_list = []
+                in_list = {}
                 for choice in choices:
                     description = _.t(
                         sentence=choice[1], tag=tag + "__choices")
-                    in_list.append({
-                        "value": choice[0], "description": description})
+                    in_list[choice[0]] = {
+                        "description": choice[1],
+                        "description__verbose": description}
                 column_info["in"] = in_list
 
             # Set autoincrement for primary keys
