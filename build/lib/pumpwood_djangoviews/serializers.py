@@ -1,10 +1,12 @@
 """Set base serializers for PumpWood systems."""
 import os
 from rest_framework import serializers
+from pumpwood_communication.microservices import PumpWoodMicroService
 
 
 class ClassNameField(serializers.Field):
     """Serializer Field that returns model name."""
+
     def __init__(self, **kwargs):
         kwargs['read_only'] = True
         super(ClassNameField, self).__init__(**kwargs)
@@ -79,6 +81,53 @@ class CustomChoiceTypeField(serializers.Field):
         else:
             # Caso esteja retornando só o valor da chave do banco
             return data
+
+
+class MicroserviceForeignKeyField(serializers.Field):
+    """
+    Serializer field for ChoiceTypeField.
+
+    Returns a tupple with both real value on [0] and get_{field_name}_display
+    on [1]. to_internal_value uses only de first value os the tupple
+    if a tupple, or just the value if not a tupple.
+    """
+
+    def __init__(self, source: str, microservice: PumpWoodMicroService,
+                 model_class: str, **kwargs):
+        self.microservice = microservice
+        self.model_class = model_class
+        super(MicroserviceForeignKeyField, self).__init__(
+            source=source, **kwargs)
+
+    def bind(self, field_name, parent):
+        # In order to enforce a consistent style, we error if a redundant
+        # 'method_name' argument has been used. For example:
+        # my_field = serializer.CharField(source='my_field')
+        if self.field_name is None:
+            self.field_name = field_name
+        else:
+            assert self.field_name != field_name, (
+              "It is redundant to specify field_name when it is the same")
+        super(MicroserviceForeignKeyField, self).bind(field_name, parent)
+
+    def get_attribute(self, obj):
+        """
+        We pass the object instance onto `to_representation`,
+        not just the field attribute.
+        """
+        return obj
+
+    def to_representation(self, obj):
+        """Use microservice to get object at serialization."""
+        print("self.source:", self.source)
+        print("obj:", obj)
+        object_pk = getattr(obj, self.source)
+        return self.microservice.list_one(
+            model_class=self.model_class,
+            pk=object_pk)
+
+    def to_internal_value(self, data):
+        print("data:", data)
 
 
 class CustomNestedSerializer(serializers.Field):

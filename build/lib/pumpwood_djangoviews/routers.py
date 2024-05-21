@@ -67,6 +67,13 @@ class PumpWoodRouter(BaseRouter):
                 viewset.as_view({'get': 'retrieve', 'delete': 'delete'}),
                 name='rest__{basename}__retrieve'.format(basename=basename)))
 
+        # list-one
+        url_retrieve = '^rest/{basename}/list-one/(?P<pk>\d+)/$'
+        resp_list.append(
+            url(url_retrieve.format(basename=basename),
+                viewset.as_view({'get': 'list_one'}),
+                name='rest__{basename}__list_one'.format(basename=basename)))
+
         # retrieve file
         url_retrieve = '^rest/{basename}/retrieve-file/(?P<pk>\d+)/$'
         resp_list.append(

@@ -209,6 +209,33 @@ class PumpWoodRestService(viewsets.ViewSet):
         obj = self.service_model.objects.get(pk=pk)
         return Response(self.serializer(obj, many=False).data)
 
+    def list_one(self, request, pk: int):
+        """
+        Retrieve view, uses the list serializer to return object with pk.
+
+        :param int pk: Object pk to be retrieve
+        :return: The representation of the object passed by
+                 self.retrieve_serializer
+        :rtype: dict
+        """
+        fields = request.query_params.get("fields", None)
+        default_fields = \
+            request.query_params.get("default_fields", "False") == "True"
+        obj = self.service_model.objects.get(pk=pk)
+
+        # If field is set always return the requested fields.
+        if fields is not None:
+            list_fields = fields
+        # default_fields is True, return the ones specified by
+        # self.list_fields
+        elif default_fields:
+            list_fields = self.list_fields
+        # If default_fields not set return all object fields.
+        else:
+            list_fields = None
+        return Response(self.serializer(
+            obj, many=False, fields=list_fields).data)
+
     def retrieve_file(self, request, pk: int):
         """
         Read file without stream.
