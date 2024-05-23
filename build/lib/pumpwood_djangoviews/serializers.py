@@ -276,7 +276,6 @@ class DynamicFieldsModelSerializer(serializers.ModelSerializer):
         # requests to other microservices
         to_remove = []
         for key, item in self.fields.items():
-            print(key)
             # If field are set then use fields that were sent by user to make
             # serialization
             if fields is not None:
@@ -294,7 +293,5 @@ class DynamicFieldsModelSerializer(serializers.ModelSerializer):
                 if (is_foreign_key and not foreign_key_fields):
                     to_remove.append(key)
                     continue
-
-        print("to_remove:", to_remove)
         for field_name in to_remove:
             self.fields.pop(field_name)
