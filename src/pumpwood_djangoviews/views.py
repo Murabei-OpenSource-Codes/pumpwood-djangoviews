@@ -127,8 +127,16 @@ class PumpWoodRestService(viewsets.ViewSet):
             limit = request_data.pop("limit", None)
             list_paginate_limit = limit or self.list_paginate_limit
 
+            # Serializer parameters
             fields = request_data.pop("fields", None)
             default_fields = request_data.pop("default_fields", False)
+            foreign_key_fields = request_data.pop("foreign_key_fields", False)
+            related_fields = request_data.pop("related_fields", False)
+
+            print("[list] fields:", fields)
+            print("[list] default_fields:", default_fields)
+            print("[list] foreign_key_fields:", foreign_key_fields)
+            print("[list] related_fields:", related_fields)
 
             # If field is set always return the requested fields.
             if fields is not None:
@@ -146,7 +154,11 @@ class PumpWoodRestService(viewsets.ViewSet):
             query_set = filter_by_dict(**arg_dict)[:list_paginate_limit]
 
             return Response(self.serializer(
-                query_set, many=True, fields=list_fields).data)
+                query_set, many=True,
+                fields=list_fields,
+                foreign_key_fields=foreign_key_fields,
+                related_fields=related_fields).data)
+
         except TypeError as e:
             raise exceptions.PumpWoodQueryException(message=str(e))
 
@@ -173,8 +185,12 @@ class PumpWoodRestService(viewsets.ViewSet):
         """
         try:
             request_data = request.data
+
+            # Serializer parameters
             fields = request_data.pop("fields", None)
             default_fields = request_data.pop("default_fields", False)
+            foreign_key_fields = request_data.pop("foreign_key_fields", False)
+            related_fields = request_data.pop("related_fields", False)
 
             # If field is set always return the requested fields.
             if fields is not None:
@@ -192,7 +208,10 @@ class PumpWoodRestService(viewsets.ViewSet):
 
             query_set = filter_by_dict(**arg_dict)
             return Response(self.serializer(
-                query_set, many=True, fields=list_fields).data)
+                query_set, many=True,
+                foreign_key_fields=foreign_key_fields,
+                related_fields=related_fields).data)
+
         except TypeError as e:
             raise exceptions.PumpWoodQueryException(
                 message=str(e))
@@ -207,20 +226,16 @@ class PumpWoodRestService(viewsets.ViewSet):
         :rtype: dict
         """
         obj = self.service_model.objects.get(pk=pk)
-        return Response(self.serializer(obj, many=False).data)
 
-    def list_one(self, request, pk: int):
-        """
-        Retrieve view, uses the list serializer to return object with pk.
-
-        :param int pk: Object pk to be retrieve
-        :return: The representation of the object passed by
-                 self.retrieve_serializer
-        :rtype: dict
-        """
+        ##########################
+        # Get serializer options #
         fields = request.query_params.get("fields", None)
         default_fields = \
             request.query_params.get("default_fields", "False") == "True"
+        foreign_key_fields = \
+            request.query_params.get("foreign_key_fields", "False") == "True"
+        related_fields = \
+            request.query_params.get("related_fields", "False") == "True"
         obj = self.service_model.objects.get(pk=pk)
 
         # If field is set always return the requested fields.
@@ -233,8 +248,11 @@ class PumpWoodRestService(viewsets.ViewSet):
         # If default_fields not set return all object fields.
         else:
             list_fields = None
+
         return Response(self.serializer(
-            obj, many=False, fields=list_fields).data)
+            obj, many=False, fields=list_fields,
+            foreign_key_fields=foreign_key_fields,
+            related_fields=related_fields).data)
 
     def retrieve_file(self, request, pk: int):
         """

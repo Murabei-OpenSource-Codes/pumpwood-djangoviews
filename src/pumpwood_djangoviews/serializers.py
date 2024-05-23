@@ -4,6 +4,7 @@ from rest_framework import serializers
 from pumpwood_communication.microservices import PumpWoodMicroService
 
 
+
 class ClassNameField(serializers.Field):
     """Serializer Field that returns model name."""
 
@@ -264,12 +265,36 @@ class DynamicFieldsModelSerializer(serializers.ModelSerializer):
     def __init__(self, *args, **kwargs):
         # Don't pass the 'fields' arg up to the superclass
         fields = kwargs.pop('fields', None)
+        foreign_key_fields = kwargs.pop('foreign_key_fields', False)
+        related_fields = kwargs.pop('related_fields', False)
+        many = kwargs.get("many", False)
 
         # Instantiate the superclass normally
         super(DynamicFieldsModelSerializer, self).__init__(*args, **kwargs)
-        if fields is not None:
-            # Drop any fields that are not specified in the `fields` argument.
-            allowed = set(fields)
-            existing = set(self.fields)
-            for field_name in existing - allowed:
-                self.fields.pop(field_name)
+
+        # Remove fields that are not on fields and are fk related to reduce #
+        # requests to other microservices
+        to_remove = []
+        for key, item in self.fields.items():
+            print(key)
+            # If field are set then use fields that were sent by user to make
+            # serialization
+            if fields is not None:
+                if key not in fields:
+                    to_remove.append(key)
+            else:
+                # Keep related only if user ask to keep them
+                is_related = isinstance(item, MicroserviceRelatedField)
+                if (is_related and not related_fields) or many:
+                    to_remove.append(key)
+                    continue
+
+                # Keep FK only if user ask for them
+                is_foreign_key = isinstance(item, MicroserviceForeignKeyField)
+                if (is_foreign_key and not foreign_key_fields):
+                    to_remove.append(key)
+                    continue
+
+        print("to_remove:", to_remove)
+        for field_name in to_remove:
+            self.fields.pop(field_name)
