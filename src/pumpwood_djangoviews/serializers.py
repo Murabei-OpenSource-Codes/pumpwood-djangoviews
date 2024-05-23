@@ -85,7 +85,7 @@ class CustomChoiceTypeField(serializers.Field):
 
 class MicroserviceForeignKeyField(serializers.Field):
     """
-    Serializer field for ChoiceTypeField.
+    Serializer field for ForeignKey using microservice.
 
     Returns a tupple with both real value on [0] and get_{field_name}_display
     on [1]. to_internal_value uses only de first value os the tupple
@@ -93,11 +93,18 @@ class MicroserviceForeignKeyField(serializers.Field):
     """
 
     def __init__(self, source: str, microservice: PumpWoodMicroService,
-                 model_class: str, **kwargs):
+                 model_class: str,  display_field: str, **kwargs):
         self.microservice = microservice
         self.model_class = model_class
+        self.display_field = display_field
+
+        # Set as read only and not required, changes on foreign key must be
+        # done using id
+        kwargs.pop('required', None)
+        kwargs.pop('read_only', None)
         super(MicroserviceForeignKeyField, self).__init__(
-            source=source, **kwargs)
+            source=source, required=False,
+            read_only=True, **kwargs)
 
     def bind(self, field_name, parent):
         # In order to enforce a consistent style, we error if a redundant
@@ -119,15 +126,86 @@ class MicroserviceForeignKeyField(serializers.Field):
 
     def to_representation(self, obj):
         """Use microservice to get object at serialization."""
-        print("self.source:", self.source)
-        print("obj:", obj)
         object_pk = getattr(obj, self.source)
-        return self.microservice.list_one(
+        object_data = self.microservice.list_one(
             model_class=self.model_class,
             pk=object_pk)
+        object_data['__display_field__'] = object_data[self.display_field]
+        return object_data
 
     def to_internal_value(self, data):
-        print("data:", data)
+        raise NotImplementedError(
+            "MicroserviceForeignKeyField are read-only")
+
+    def to_dict(self):
+        """Return a dict with values to be used on options end-point."""
+        return {
+            'model_class': self.model_class, 'many': False,
+            'display_field': self.display_field,
+            'object_field': self.field_name}
+
+
+class MicroserviceRelatedField(serializers.Field):
+    """
+    Serializer field for related objects using microservice.
+
+    It is an informational serializer to related models.
+    """
+
+    def __init__(self, microservice: PumpWoodMicroService,
+                 model_class: str,  foreign_key: str,
+                 write_only: bool = True, pk_field: str = 'id',
+                 order_by: str = ["id"], **kwargs):
+        self.microservice = microservice
+        self.model_class = model_class
+        self.foreign_key = foreign_key
+        self.pk_field = pk_field
+        self.order_by = order_by
+
+        # Force field not be necessary for saving object
+        kwargs["required"] = False
+
+        # Set as read only and not required, changes on foreign key must be
+        # done using id
+        super(MicroserviceRelatedField, self).__init__(
+            write_only=write_only, **kwargs)
+
+    def bind(self, field_name, parent):
+        # In order to enforce a consistent style, we error if a redundant
+        # 'method_name' argument has been used. For example:
+        # my_field = serializer.CharField(source='my_field')
+        if self.field_name is None:
+            self.field_name = field_name
+        else:
+            assert self.field_name != field_name, (
+              "It is redundant to specify field_name when it is the same")
+        super(MicroserviceRelatedField, self).bind(field_name, parent)
+
+    def get_attribute(self, obj):
+        """
+        We pass the object instance onto `to_representation`,
+        not just the field attribute.
+        """
+        return obj
+
+    def to_representation(self, obj):
+        """Use microservice to get object at serialization."""
+        pk_field = getattr(obj, self.pk_field)
+        return self.microservice.list_without_pag(
+            model_class=self.model_class,
+            filter_dict={self.foreign_key: pk_field},
+            order_by=self.order_by)
+
+    def to_internal_value(self, data):
+        """Unserialize data from related objects as empty dictionary."""
+        return {}
+
+    def to_dict(self):
+        """Return a dict with values to be used on options end-point."""
+        return {
+            'model_class': self.model_class, 'many': True,
+            'pk_field': self.pk_field, 'order_by': self.order_by,
+            'foreign_key': self.foreign_key}
 
 
 class CustomNestedSerializer(serializers.Field):
