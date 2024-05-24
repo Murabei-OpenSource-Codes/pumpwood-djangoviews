@@ -18,7 +18,8 @@ from pumpwood_djangoviews.action import load_action_parameters
 from pumpwood_djangoviews.aux.map_django_types import django_map
 from django.db.models.fields.files import FieldFile
 from pumpwood_djangoviews.serializers import (
-    MicroserviceForeignKeyField, MicroserviceRelatedField)
+    MicroserviceForeignKeyField, MicroserviceRelatedField,
+    LocalForeignKeyField, LocalRelatedField)
 
 
 def save_serializer_instance(serializer_instance):
@@ -604,7 +605,8 @@ class PumpWoodRestService(viewsets.ViewSet):
         read_only_fields = getattr(cls.serializer.Meta, "read_only_fields", [])
 
         # Get field serializers
-        serializer_fields = cls.serializer().fields
+        serializer_fields = cls.serializer(
+            foreign_key_fields=True, related_fields=True).fields
 
         # Get serializers associated with FKs and related models
         microservice_fk_dict = {}
@@ -616,16 +618,19 @@ class PumpWoodRestService(viewsets.ViewSet):
             # Do not create relations between models in search description #
             is_microservice_fk = isinstance(
                 field_serializer, MicroserviceForeignKeyField)
-            if is_microservice_fk:
-                microservice_fk_dict[
-                    field_serializer.source] = field_serializer
-                continue
+            is_local_fk = isinstance(
+                field_serializer, LocalForeignKeyField)
+            if is_microservice_fk or is_local_fk:
+                field_key = field_serializer.get_fields_options_key()
+                microservice_fk_dict[field_key] = field_serializer
 
             is_microservice_related = isinstance(
                 field_serializer, MicroserviceRelatedField)
-            if is_microservice_related:
-                microservice_related_dict[
-                    field_serializer.source] = field_serializer
+            is_local_related = isinstance(
+                field_serializer, LocalRelatedField)
+            if is_microservice_related or is_local_related:
+                field_key = field_serializer.get_fields_options_key()
+                microservice_related_dict[field_key] = field_serializer
 
             f = dict_fields.get(field_serializer.source)
             if f is None:

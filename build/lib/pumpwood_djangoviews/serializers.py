@@ -1,8 +1,19 @@
 """Set base serializers for PumpWood systems."""
 import os
+import importlib
 from rest_framework import serializers
 from pumpwood_communication.microservices import PumpWoodMicroService
 
+
+def _import_function_by_string(module_function_string):
+    """Help when importing a function using a string."""
+    # Split the module and function names
+    module_name, function_name = module_function_string.rsplit('.', 1)
+    # Import the module
+    module = importlib.import_module(module_name)
+    # Retrieve the function
+    func = getattr(module, function_name)
+    return func
 
 
 class ClassNameField(serializers.Field):
@@ -84,6 +95,8 @@ class CustomChoiceTypeField(serializers.Field):
             return data
 
 
+####################################
+# Microservice related serializers #
 class MicroserviceForeignKeyField(serializers.Field):
     """
     Serializer field for ForeignKey using microservice.
@@ -101,11 +114,14 @@ class MicroserviceForeignKeyField(serializers.Field):
 
         # Set as read only and not required, changes on foreign key must be
         # done using id
-        kwargs.pop('required', None)
-        kwargs.pop('read_only', None)
+        kwargs['required'] = False
+        kwargs['read_only'] = True
         super(MicroserviceForeignKeyField, self).__init__(
-            source=source, required=False,
-            read_only=True, **kwargs)
+            source=source, **kwargs)
+
+    def get_fields_options_key(self):
+        """Return key that will be used on fill options return."""
+        return field_serializer.source
 
     def bind(self, field_name, parent):
         # In order to enforce a consistent style, we error if a redundant
@@ -155,8 +171,8 @@ class MicroserviceRelatedField(serializers.Field):
 
     def __init__(self, microservice: PumpWoodMicroService,
                  model_class: str,  foreign_key: str,
-                 write_only: bool = True, pk_field: str = 'id',
-                 order_by: str = ["id"], **kwargs):
+                 pk_field: str = 'id', order_by: str = ["id"],
+                 **kwargs):
         self.microservice = microservice
         self.model_class = model_class
         self.foreign_key = foreign_key
@@ -165,11 +181,15 @@ class MicroserviceRelatedField(serializers.Field):
 
         # Force field not be necessary for saving object
         kwargs["required"] = False
+        kwargs["read_only"] = False
 
         # Set as read only and not required, changes on foreign key must be
         # done using id
-        super(MicroserviceRelatedField, self).__init__(
-            write_only=write_only, **kwargs)
+        super(MicroserviceRelatedField, self).__init__(**kwargs)
+
+    def get_fields_options_key(self):
+        """Return key that will be used on fill options return."""
+        return field_serializer.source
 
     def bind(self, field_name, parent):
         # In order to enforce a consistent style, we error if a redundant
@@ -208,6 +228,106 @@ class MicroserviceRelatedField(serializers.Field):
             'pk_field': self.pk_field, 'order_by': self.order_by,
             'foreign_key': self.foreign_key}
 
+
+##################################
+# Local foreign keys serializers #
+class LocalForeignKeyField(serializers.Field):
+    """
+    Serializer field for ForeignKey using microservice.
+
+    Returns a tupple with both real value on [0] and get_{field_name}_display
+    on [1]. to_internal_value uses only de first value os the tupple
+    if a tupple, or just the value if not a tupple.
+    """
+
+    def __init__(self, serializer, display_field: str = None,
+                 fields: list = None, **kwargs):
+        # Avoid circular imports for related models and cache lazzy loaded
+        # serializers
+        self.serializer_cache = None
+        self.serializer = serializer
+        self.display_field = display_field
+        self.fields = fields
+        kwargs['read_only'] = True
+        super(LocalForeignKeyField, self).__init__(**kwargs)
+
+    def get_fields_options_key(self):
+        """Return key that will be used on fill options return."""
+        return parent_field.field.column
+
+    def to_representation(self, value):
+        if self.serializer_cache is None:
+            if type(self.serializer) == str:
+                self.serializer_cache = _import_function_by_string(
+                    self.serializer)
+            else:
+                self.serializer_cache = self.serializer
+        data = self.serializer_cache(
+                value, many=False, fields=self.fields).data
+        display_field = data.get(self.display_field, None)
+        data['__display_field__'] = display_field
+        return data
+
+    def to_dict(self):
+        """Return a dict with values to be used on options end-point."""
+        model = self.parent.Meta.model
+        parent_field = getattr(model, self.source)
+        model_class = parent_field.field.related_model.__name__
+        return {
+            'model_class': model_class, 'many': False,
+            'display_field': self.display_field,
+            'object_field': self.field_name}
+
+
+class LocalRelatedField(serializers.Field):
+    """
+    Serializer field for related objects using microservice.
+
+    It is an informational serializer to related models.
+    """
+
+    def __init__(self, serializer, order_by=["-id"], **kwargs):
+        # Avoid circular imports for related models and cache lazzy loaded
+        # serializers
+        self.serializer_cache = None
+        self.serializer = serializer
+        self.order_by = order_by
+        kwargs['read_only'] = True
+        super(LocalRelatedField, self).__init__(**kwargs)
+
+    def get_fields_options_key(self):
+        """Return key that will be used on fill options return."""
+        return field_serializer.source
+
+    def to_representation(self, value):
+        """Return all related data serialized."""
+        print("value:", value)
+        if self.serializer_cache is None:
+            if type(self.serializer) == str:
+                self.serializer_cache = _import_function_by_string(
+                    self.serializer)
+            else:
+                self.serializer_cache = self.serializer
+        return self.serializer_cache(
+            value.order_by(*self.order_by).all(),
+            many=True).data
+
+    def to_dict(self):
+        """Return a dict with values to be used on options end-point."""
+        # Get information from related field
+        model = self.parent.Meta.model
+        parent_field = getattr(model, self.source)
+        foreign_key = parent_field.field.column
+
+        pk_field = parent_field.rel.target_field
+        pk_field_return = \
+            'pk' if pk_field.primary_key else pk_field.column
+
+        model_class = parent_field.rel.related_model.__name__
+        return {
+            'model_class': model_class, 'many': True,
+            "pk_field": pk_field_return, 'order_by': self.order_by,
+            'foreign_key': foreign_key}
 
 class CustomNestedSerializer(serializers.Field):
     """
@@ -283,13 +403,19 @@ class DynamicFieldsModelSerializer(serializers.ModelSerializer):
                     to_remove.append(key)
             else:
                 # Keep related only if user ask to keep them
-                is_related = isinstance(item, MicroserviceRelatedField)
+                is_related_local = isinstance(item, LocalRelatedField)
+                is_related_micro = isinstance(item, MicroserviceRelatedField)
+                is_related = is_related_local or is_related_micro
                 if (is_related and not related_fields) or many:
                     to_remove.append(key)
                     continue
 
                 # Keep FK only if user ask for them
-                is_foreign_key = isinstance(item, MicroserviceForeignKeyField)
+                is_foreign_key_local = isinstance(
+                    item, LocalForeignKeyField)
+                is_foreign_key_micro = isinstance(
+                    item, MicroserviceForeignKeyField)
+                is_foreign_key = is_foreign_key_local or is_foreign_key_micro
                 if (is_foreign_key and not foreign_key_fields):
                     to_remove.append(key)
                     continue
