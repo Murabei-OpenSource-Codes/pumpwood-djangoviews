@@ -121,7 +121,7 @@ class MicroserviceForeignKeyField(serializers.Field):
 
     def get_fields_options_key(self):
         """Return key that will be used on fill options return."""
-        return field_serializer.source
+        return self.source
 
     def bind(self, field_name, parent):
         # In order to enforce a consistent style, we error if a redundant
