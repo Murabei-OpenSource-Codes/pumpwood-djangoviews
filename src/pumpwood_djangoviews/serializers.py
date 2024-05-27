@@ -257,6 +257,8 @@ class LocalForeignKeyField(serializers.Field):
 
     def get_fields_options_key(self):
         """Return key that will be used on fill options return."""
+        model = self.parent.Meta.model
+        parent_field = getattr(model, self.source)
         return parent_field.field.column
 
     def to_representation(self, value):
