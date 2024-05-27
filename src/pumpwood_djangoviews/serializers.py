@@ -143,6 +143,8 @@ class MicroserviceForeignKeyField(serializers.Field):
 
     def to_representation(self, obj):
         """Use microservice to get object at serialization."""
+        self.microservice.login()
+
         object_pk = getattr(obj, self.source)
         object_data = self.microservice.list_one(
             model_class=self.model_class,
@@ -211,6 +213,8 @@ class MicroserviceRelatedField(serializers.Field):
 
     def to_representation(self, obj):
         """Use microservice to get object at serialization."""
+        self.microservice.login()
+
         pk_field = getattr(obj, self.pk_field)
         return self.microservice.list_without_pag(
             model_class=self.model_class,

@@ -132,12 +132,6 @@ class PumpWoodRestService(viewsets.ViewSet):
             fields = request_data.pop("fields", None)
             default_fields = request_data.pop("default_fields", False)
             foreign_key_fields = request_data.pop("foreign_key_fields", False)
-            related_fields = request_data.pop("related_fields", False)
-
-            print("[list] fields:", fields)
-            print("[list] default_fields:", default_fields)
-            print("[list] foreign_key_fields:", foreign_key_fields)
-            print("[list] related_fields:", related_fields)
 
             # If field is set always return the requested fields.
             if fields is not None:
@@ -157,8 +151,7 @@ class PumpWoodRestService(viewsets.ViewSet):
             return Response(self.serializer(
                 query_set, many=True,
                 fields=list_fields,
-                foreign_key_fields=foreign_key_fields,
-                related_fields=related_fields).data)
+                foreign_key_fields=foreign_key_fields).data)
 
         except TypeError as e:
             raise exceptions.PumpWoodQueryException(message=str(e))
@@ -191,7 +184,6 @@ class PumpWoodRestService(viewsets.ViewSet):
             fields = request_data.pop("fields", None)
             default_fields = request_data.pop("default_fields", False)
             foreign_key_fields = request_data.pop("foreign_key_fields", False)
-            related_fields = request_data.pop("related_fields", False)
 
             # If field is set always return the requested fields.
             if fields is not None:
@@ -210,8 +202,7 @@ class PumpWoodRestService(viewsets.ViewSet):
             query_set = filter_by_dict(**arg_dict)
             return Response(self.serializer(
                 query_set, many=True,
-                foreign_key_fields=foreign_key_fields,
-                related_fields=related_fields).data)
+                foreign_key_fields=foreign_key_fields).data)
 
         except TypeError as e:
             raise exceptions.PumpWoodQueryException(
@@ -231,27 +222,14 @@ class PumpWoodRestService(viewsets.ViewSet):
         ##########################
         # Get serializer options #
         fields = request.query_params.get("fields", None)
-        default_fields = \
-            request.query_params.get("default_fields", "False") == "True"
         foreign_key_fields = \
             request.query_params.get("foreign_key_fields", "False") == "True"
         related_fields = \
             request.query_params.get("related_fields", "False") == "True"
+
         obj = self.service_model.objects.get(pk=pk)
-
-        # If field is set always return the requested fields.
-        if fields is not None:
-            list_fields = fields
-        # default_fields is True, return the ones specified by
-        # self.list_fields
-        elif default_fields:
-            list_fields = self.list_fields
-        # If default_fields not set return all object fields.
-        else:
-            list_fields = None
-
         return Response(self.serializer(
-            obj, many=False, fields=list_fields,
+            obj, many=False, fields=fields,
             foreign_key_fields=foreign_key_fields,
             related_fields=related_fields).data)
 
