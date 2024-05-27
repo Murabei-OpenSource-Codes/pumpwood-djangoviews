@@ -699,6 +699,7 @@ class PumpWoodRestService(viewsets.ViewSet):
         #############################################
         # Adding field description for foreign keys #
         for key, item in microservice_fk_dict.items():
+            print("key:", key)
             column = getattr(cls.service_model, key, None)
             tag = translation_tag_template.format(
                 model_class=model_class, field=key)
