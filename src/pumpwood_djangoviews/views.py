@@ -705,6 +705,7 @@ class PumpWoodRestService(viewsets.ViewSet):
                     "Foreign Key [{key}] was not found as model_class "
                     "[{model_class}] fields")
                 raise exceptions.PumpWoodOtherException(
+                    message=msg,
                     payload={"key": key, "model_class": model_class})
 
             tag = translation_tag_template.format(
