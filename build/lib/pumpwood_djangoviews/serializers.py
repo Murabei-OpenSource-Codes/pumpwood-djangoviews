@@ -151,8 +151,7 @@ class MicroserviceForeignKeyField(serializers.Field):
             return {"model_class": self.model_class}
 
         object_data = self.microservice.list_one(
-            model_class=self.model_class,
-            pk=object_pk)
+            model_class=self.model_class, pk=object_pk)
         object_data['__display_field__'] = object_data[self.display_field]
         return object_data
 
@@ -319,7 +318,6 @@ class LocalRelatedField(serializers.Field):
 
     def to_representation(self, value):
         """Return all related data serialized."""
-        print("value:", value)
         if self.serializer_cache is None:
             if type(self.serializer) is str:
                 self.serializer_cache = _import_function_by_string(
@@ -403,13 +401,22 @@ class DynamicFieldsModelSerializer(serializers.ModelSerializer):
 
     def __init__(self, *args, **kwargs):
         # Don't pass the 'fields' arg up to the superclass
-        fields = kwargs.pop('fields', None)
-        foreign_key_fields = kwargs.pop('foreign_key_fields', False)
-        related_fields = kwargs.pop('related_fields', False)
         many = kwargs.get("many", False)
+
+        # Extract custom fields
+        fields = kwargs.pop("fields", None)
+        default_fields = kwargs.pop("default_fields", False)
+        foreign_key_fields = kwargs.pop("foreign_key_fields", False)
+        related_fields = kwargs.pop("related_fields", False)
 
         # Instantiate the superclass normally
         super(DynamicFieldsModelSerializer, self).__init__(*args, **kwargs)
+
+        # default_fields is True, return the ones specified by
+        # Meta.list_fields
+        if default_fields and fields is None:
+            fields = self.get_list_fields()
+        ##########################
 
         # Remove fields that are not on fields and are fk related to reduce #
         # requests to other microservices
@@ -438,5 +445,59 @@ class DynamicFieldsModelSerializer(serializers.ModelSerializer):
                 if (is_foreign_key and not foreign_key_fields):
                     to_remove.append(key)
                     continue
+
         for field_name in to_remove:
             self.fields.pop(field_name)
+
+    def get_list_fields(self):
+        """
+        Get list fields from serializer.
+
+        Args:
+            No Args.
+        Return [list]:
+            Default fields to be used at list and retrive with
+            default_fields=True.
+        """
+        list_fields = getattr(self.Meta, 'list_fields', None)
+        if list_fields is None:
+            return list(self.fields.keys())
+        return list_fields
+
+    def get_foreign_keys(self) -> dict:
+        """
+        Return a dictonary with all foreign_key fields.
+
+        Args:
+            No Args.
+        Kwargs:
+            No Kwargs.
+        Return [dict]:
+            Return a dictionary with field name as keys and relation
+            information as value.
+        """
+        return_dict = {}
+        for field_name, field in self.fields.items():
+            is_micro_fk = isinstance(field, MicroserviceForeignKeyField)
+            if is_micro_fk:
+                return_dict[field.source] = field.to_dict()
+        return return_dict
+
+    def get_related_fields(self):
+        """
+        Return a dictionary with all related fields (M2M).
+
+        Args:
+            No Args.
+        Kwargs:
+            No Kwargs.
+        Return [dict]:
+            Return a dictionary with field name as keys and relation
+            information as value.
+        """
+        return_dict = {}
+        for field_name, field in self.fields.items():
+            is_micro_rel = isinstance(field, MicroserviceRelatedField)
+            if is_micro_rel:
+                return_dict[field.name] = field.to_dict()
+        return return_dict

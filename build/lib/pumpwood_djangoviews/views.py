@@ -83,7 +83,8 @@ class PumpWoodRestService(viewsets.ViewSet):
 
     def get_list_fields(self):
         """Return list_fields attribute."""
-        return self.list_fields
+        serializer_obj = self.serializer()
+        return serializer_obj.get_list_fields()
     ########################
 
     @staticmethod
@@ -133,25 +134,14 @@ class PumpWoodRestService(viewsets.ViewSet):
             default_fields = request_data.pop("default_fields", False)
             foreign_key_fields = request_data.pop("foreign_key_fields", False)
 
-            # If field is set always return the requested fields.
-            if fields is not None:
-                list_fields = fields
-            # default_fields is True, return the ones specified by
-            # self.list_fields
-            elif default_fields:
-                list_fields = self.list_fields
-            # If default_fields not set return all object fields.
-            else:
-                list_fields = None
-
             arg_dict = {'query_set': self.service_model.objects.all()}
             arg_dict.update(request_data)
             query_set = filter_by_dict(**arg_dict)[:list_paginate_limit]
 
             return Response(self.serializer(
-                query_set, many=True,
-                fields=list_fields,
-                foreign_key_fields=foreign_key_fields).data)
+                query_set, many=True, fields=fields,
+                foreign_key_fields=foreign_key_fields,
+                default_fields=default_fields).data)
 
         except TypeError as e:
             raise exceptions.PumpWoodQueryException(message=str(e))
@@ -185,23 +175,13 @@ class PumpWoodRestService(viewsets.ViewSet):
             default_fields = request_data.pop("default_fields", False)
             foreign_key_fields = request_data.pop("foreign_key_fields", False)
 
-            # If field is set always return the requested fields.
-            if fields is not None:
-                list_fields = fields
-            # default_fields is True, return the ones specified by
-            # self.list_fields
-            elif default_fields:
-                list_fields = self.list_fields
-            # If default_fields not set return all object fields.
-            else:
-                list_fields = None
-
             arg_dict = {'query_set': self.service_model.objects.all()}
             arg_dict.update(request_data)
 
             query_set = filter_by_dict(**arg_dict)
             return Response(self.serializer(
-                query_set, many=True,
+                query_set, many=True, fields=fields,
+                default_fields=default_fields,
                 foreign_key_fields=foreign_key_fields).data)
 
         except TypeError as e:
@@ -217,8 +197,6 @@ class PumpWoodRestService(viewsets.ViewSet):
                  self.retrieve_serializer
         :rtype: dict
         """
-        obj = self.service_model.objects.get(pk=pk)
-
         ##########################
         # Get serializer options #
         fields = json.loads(
@@ -229,24 +207,16 @@ class PumpWoodRestService(viewsets.ViewSet):
             request.query_params.get('related_fields', 'false'))
         default_fields = json.loads(
             request.query_params.get('default_fields', 'false'))
-
-        # If field is set always return the requested fields.
-        if fields is not None:
-            list_fields = fields
-        # default_fields is True, return the ones specified by
-        # self.list_fields
-        elif default_fields:
-            list_fields = self.list_fields
-        # If default_fields not set return all object fields.
-        else:
-            list_fields = None
         ##########################
 
         obj = self.service_model.objects.get(pk=pk)
-        return Response(self.serializer(
-            obj, many=False, fields=list_fields,
+        response_data = self.serializer(
+            obj, many=False, fields=fields,
             foreign_key_fields=foreign_key_fields,
-            related_fields=related_fields).data)
+            related_fields=related_fields,
+            default_fields=default_fields).data
+
+        return Response(response_data)
 
     def retrieve_file(self, request, pk: int):
         """
@@ -561,8 +531,7 @@ class PumpWoodRestService(viewsets.ViewSet):
                         "service_model": temp_service_model, "pk": pk})
 
             action = getattr(model_object, action_name)
-            object_dict = self.serializer(
-                model_object, many=False, fields=self.list_fields).data
+            object_dict = self.serializer(model_object, many=False).data
         else:
             action = getattr(self.service_model, action_name)
 
