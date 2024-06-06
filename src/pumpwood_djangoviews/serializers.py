@@ -146,6 +146,10 @@ class MicroserviceForeignKeyField(serializers.Field):
         self.microservice.login()
 
         object_pk = getattr(obj, self.source)
+        # Return an empty object if object pk is None
+        if object_pk is None:
+            return {"model_class": self.model_class}
+
         object_data = self.microservice.list_one(
             model_class=self.model_class,
             pk=object_pk)
@@ -263,13 +267,21 @@ class LocalForeignKeyField(serializers.Field):
 
     def to_representation(self, value):
         if self.serializer_cache is None:
-            if type(self.serializer) == str:
+            if type(self.serializer) is str:
                 self.serializer_cache = _import_function_by_string(
                     self.serializer)
             else:
                 self.serializer_cache = self.serializer
+
+        # Return an empty object if object pk is None
+        if value is None:
+            model = self.parent.Meta.model
+            parent_field = getattr(model, self.source)
+            model_class = parent_field.field.related_model.__name__
+            return {"model_class": model_class}
+
         data = self.serializer_cache(
-                value, many=False, fields=self.fields).data
+            value, many=False, fields=self.fields).data
         display_field = data.get(self.display_field, None)
         data['__display_field__'] = display_field
         return data
@@ -309,7 +321,7 @@ class LocalRelatedField(serializers.Field):
         """Return all related data serialized."""
         print("value:", value)
         if self.serializer_cache is None:
-            if type(self.serializer) == str:
+            if type(self.serializer) is str:
                 self.serializer_cache = _import_function_by_string(
                     self.serializer)
             else:

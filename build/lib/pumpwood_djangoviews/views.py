@@ -221,15 +221,30 @@ class PumpWoodRestService(viewsets.ViewSet):
 
         ##########################
         # Get serializer options #
-        fields = request.query_params.get("fields", None)
-        foreign_key_fields = \
-            request.query_params.get("foreign_key_fields", "False") == "True"
-        related_fields = \
-            request.query_params.get("related_fields", "False") == "True"
+        fields = json.loads(
+            request.query_params.get('fields', 'null'))
+        foreign_key_fields = json.loads(
+            request.query_params.get('foreign_key_fields', 'false'))
+        related_fields = json.loads(
+            request.query_params.get('related_fields', 'false'))
+        default_fields = json.loads(
+            request.query_params.get('default_fields', 'false'))
+
+        # If field is set always return the requested fields.
+        if fields is not None:
+            list_fields = fields
+        # default_fields is True, return the ones specified by
+        # self.list_fields
+        elif default_fields:
+            list_fields = self.list_fields
+        # If default_fields not set return all object fields.
+        else:
+            list_fields = None
+        ##########################
 
         obj = self.service_model.objects.get(pk=pk)
         return Response(self.serializer(
-            obj, many=False, fields=fields,
+            obj, many=False, fields=list_fields,
             foreign_key_fields=foreign_key_fields,
             related_fields=related_fields).data)
 
