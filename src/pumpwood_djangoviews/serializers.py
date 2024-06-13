@@ -177,12 +177,13 @@ class MicroserviceRelatedField(serializers.Field):
     def __init__(self, microservice: PumpWoodMicroService,
                  model_class: str,  foreign_key: str,
                  pk_field: str = 'id', order_by: str = ["id"],
-                 **kwargs):
+                 fields: list = None, **kwargs):
         self.microservice = microservice
         self.model_class = model_class
         self.foreign_key = foreign_key
         self.pk_field = pk_field
         self.order_by = order_by
+        self.fields = fields
 
         # Force field not be necessary for saving object
         kwargs["required"] = False
@@ -222,6 +223,7 @@ class MicroserviceRelatedField(serializers.Field):
         return self.microservice.list_without_pag(
             model_class=self.model_class,
             filter_dict={self.foreign_key: pk_field},
+            default_fields=True, fields=self.fields,
             order_by=self.order_by)
 
     def to_internal_value(self, data):
@@ -280,7 +282,8 @@ class LocalForeignKeyField(serializers.Field):
             return {"model_class": model_class}
 
         data = self.serializer_cache(
-            value, many=False, fields=self.fields).data
+            value, many=False, fields=self.fields,
+            default_fields=True).data
         display_field = data.get(self.display_field, None)
         data['__display_field__'] = display_field
         return data
@@ -303,12 +306,14 @@ class LocalRelatedField(serializers.Field):
     It is an informational serializer to related models.
     """
 
-    def __init__(self, serializer, order_by=["-id"], **kwargs):
+    def __init__(self, serializer, order_by=["-id"],
+                 fields: list = None, **kwargs):
         # Avoid circular imports for related models and cache lazzy loaded
         # serializers
         self.serializer_cache = None
         self.serializer = serializer
         self.order_by = order_by
+        self.fields = fields
         kwargs['read_only'] = True
         super(LocalRelatedField, self).__init__(**kwargs)
 
@@ -326,7 +331,8 @@ class LocalRelatedField(serializers.Field):
                 self.serializer_cache = self.serializer
         return self.serializer_cache(
             value.order_by(*self.order_by).all(),
-            many=True).data
+            many=True, default_fields=True,
+            fields=self.fields).data
 
     def to_dict(self):
         """Return a dict with values to be used on options end-point."""
@@ -348,7 +354,7 @@ class LocalRelatedField(serializers.Field):
 
 class CustomNestedSerializer(serializers.Field):
     """
-    Uses the seriazlizer to create the object representation, but only uses
+    Uses the serializer to create the object representation, but only uses
     its pk to get object to its internal value.
     """
     nested_serializer = None
