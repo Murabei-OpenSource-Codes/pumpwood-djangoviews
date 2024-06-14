@@ -86,7 +86,7 @@ class CustomChoiceTypeField(serializers.Field):
 
     def to_internal_value(self, data):
         # Pega como valor só o primeiro elemento do choice
-        if type(data) == list:
+        if type(data) is list:
             # Caso esteja retornando a dupla de valores [chave do banco,
             # descrição da opção]
             return data[0]
