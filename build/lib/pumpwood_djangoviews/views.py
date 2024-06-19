@@ -934,7 +934,8 @@ class PumpWoodDataBaseRestService(PumpWoodRestService):
         show_deleted = request.data.get('show_deleted', False)
         model_variables = model_variables or self.model_variables
 
-        if type(columns) is list:
+        print("columns:", columns)
+        if type(columns) is not list:
             raise exceptions.PumpWoodException(
                 'Columns must be a list of elements.')
         if len(set(columns) - set(model_variables)) != 0:
