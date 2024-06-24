@@ -840,14 +840,14 @@ class PumpWoodRestService(viewsets.ViewSet):
             all_columns = set(fields_options.keys())
             all_columns = list(all_columns - {'pk', 'model_class'})
             all_columns.sort()
-            return {
+            return Response({
                 "verbose_field": gui_verbose_field,
                 "fieldset": {
                     None: {
                         "fields": all_columns
                     }
                 }
-            }
+            })
         return Response({
             "verbose_field": gui_verbose_field,
             "fieldset": gui_retrieve_fieldset})
