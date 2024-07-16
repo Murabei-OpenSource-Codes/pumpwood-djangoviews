@@ -7,7 +7,16 @@ import pumpwood_djangoauth.i8n.translate as _
 from io import BytesIO
 from typing import List
 from django.http import HttpResponse
-from rest_framework import viewsets, status
+from django.core.exceptions import ImproperlyConfigured
+
+# Treat for development error when importing module without Django App
+try:
+    from rest_framework import viewsets, status
+except ImproperlyConfigured:
+    class viewsets:
+        class ViewSet:
+            pass
+
 from rest_framework.response import Response
 from werkzeug.utils import secure_filename
 from pumpwood_communication import exceptions

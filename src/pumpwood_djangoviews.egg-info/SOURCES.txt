@@ -1,7 +1,6 @@
 LICENSE
 MANIFEST.in
 README.md
-requirements.txt
 setup.py
 src/pumpwood_djangoviews/__init__.py
 src/pumpwood_djangoviews/action.py

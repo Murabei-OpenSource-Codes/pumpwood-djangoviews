@@ -1,6 +1,7 @@
-"""Set base serializers for PumpWood systems."""
+"""Define base serializer for pumpwood and custom fields."""
 import os
 import importlib
+from typing import List
 from rest_framework import serializers
 from pumpwood_communication.microservices import PumpWoodMicroService
 
@@ -24,22 +25,20 @@ class ClassNameField(serializers.Field):
         super(ClassNameField, self).__init__(**kwargs)
 
     def get_attribute(self, obj):
-        """
-        We pass the object instance onto `to_representation`,
-        not just the field attribute.
-        """
+        """Pass the object instance onto `to_representation`."""
         return obj
 
     def to_representation(self, obj):
-        """Serialize the object's class name."""
+        """
+        Serialize the object's class name.
+
+        ENDPOINT_SUFFIX enviroment variable is DEPRECTED.
+        """
         suffix = os.getenv('ENDPOINT_SUFFIX', '')
         return suffix + obj.__class__.__name__
 
     def to_internal_value(self, data):
-        """
-        Retorna como uma string para a validação com o nome da
-        Classe que o objeto se refere
-        """
+        """Make no treatment of the income data."""
         return data
 
 
@@ -68,31 +67,17 @@ class CustomChoiceTypeField(serializers.Field):
         super(CustomChoiceTypeField, self).bind(field_name, parent)
 
     def get_attribute(self, obj):
-        """
-        We pass the object instance onto `to_representation`,
-        not just the field attribute.
-        """
+        """Pass the object instance onto `to_representation`."""
         return obj
 
     def to_representation(self, obj):
-        display_method = 'get_{field_name}_display'.format(
-            field_name=self.field_name)
+        """No changes, DEPRECTED."""
         field_value = getattr(obj, self.field_name)
-        if field_value is not None:
-            method = getattr(obj, display_method)
-            return [field_value, method()]
-        else:
-            return None
+        return field_value
 
     def to_internal_value(self, data):
-        # Pega como valor só o primeiro elemento do choice
-        if type(data) is list:
-            # Caso esteja retornando a dupla de valores [chave do banco,
-            # descrição da opção]
-            return data[0]
-        else:
-            # Caso esteja retornando só o valor da chave do banco
-            return data
+        """No changes, DEPRECTED."""
+        return data
 
 
 ####################################
@@ -101,16 +86,68 @@ class MicroserviceForeignKeyField(serializers.Field):
     """
     Serializer field for ForeignKey using microservice.
 
-    Returns a tupple with both real value on [0] and get_{field_name}_display
-    on [1]. to_internal_value uses only de first value os the tupple
-    if a tupple, or just the value if not a tupple.
+    This serializer will fetch object data from a microservice using a
+    microservice object.
+
+    This field makes a call to the loadbalancer, caution when microservice
+    calls the same microservice of origin or serialization might result on
+    circular fetching.
+
+    Example of usage:
+    ```python
+    class MetabaseDashboardSerializer(DynamicFieldsModelSerializer):
+        pk = serializers.IntegerField(source='id', allow_null=True,
+                                      required=False)
+        model_class = ClassNameField()
+
+        # Foreign Key
+        # Will return the object data associated with updated_by_id at
+        # updated_by key at the serialized object.
+        updated_by = MicroserviceForeignKeyField(
+            model_class="User", source="updated_by_id",
+            microservice=microservice, required=False,
+            display_field='username')
+    ```
     """
 
+    microservice: PumpWoodMicroService
+    """Microservice object that will make retrieve calls for foreign key
+       object."""
+    model_class: str
+    """String setting the foreign key destiny model_class."""
+    display_field: str
+    """Set a display field to be returned as __display_field__ at foreign key
+       object. This might help frontend rendering dropdown or other
+       visualizations."""
+    fields: List[str]
+    """List of the field that will be returned with foreign key object."""
+
     def __init__(self, source: str, microservice: PumpWoodMicroService,
-                 model_class: str,  display_field: str, **kwargs):
+                 model_class: str,  display_field: str = None,
+                 fields: List[str] = None, **kwargs):
+        """
+        __init__.
+
+        Args:
+            source [str]:
+                Source attribute that contains id value associated with
+                a foreign key.
+            microservice [PumpWoodMicroService]:
+                PumpWoodMicroService object that will be used to fetch
+                information of the object associated with foreign key id.
+            model_class [str]:
+                Model class that will be used to request information at
+                with a retrieve.
+            display_field [str]:
+                Field that will be set as `__display_field__` at object
+                dictonary.
+            fields List [str]:
+                List of the fields that should be returned at the object.
+        """
         self.microservice = microservice
         self.model_class = model_class
         self.display_field = display_field
+        self.fields = fields
 
         # Set as read only and not required, changes on foreign key must be
         # done using id
@@ -135,10 +172,6 @@ class MicroserviceForeignKeyField(serializers.Field):
         super(MicroserviceForeignKeyField, self).bind(field_name, parent)
 
     def get_attribute(self, obj):
-        """
-        We pass the object instance onto `to_representation`,
-        not just the field attribute.
-        """
         return obj
 
     def to_representation(self, obj):
@@ -150,9 +183,10 @@ class MicroserviceForeignKeyField(serializers.Field):
         if object_pk is None:
             return {"model_class": self.model_class}
 
-        object_data = self.microservice.list_one(
-            model_class=self.model_class, pk=object_pk)
-        object_data['__display_field__'] = object_data[self.display_field]
+        object_data = self.microservice.retrive(
+            model_class=self.model_class, pk=object_pk,
+            default_fields=True, fields=self.fields)
+        object_data['__display_field__'] = object_data.get(self.display_field)
         return object_data
 
     def to_internal_value(self, data):
@@ -162,8 +196,10 @@ class MicroserviceForeignKeyField(serializers.Field):
     def to_dict(self):
         """Return a dict with values to be used on options end-point."""
         return {
-            'model_class': self.model_class, 'many': False,
+            'model_class': self.model_class,
+            'many': False,
             'display_field': self.display_field,
+            'fields': self.fields,
             'object_field': self.field_name}
 
 
