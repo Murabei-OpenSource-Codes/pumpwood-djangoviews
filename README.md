@@ -14,4 +14,4 @@ to use
 </p>
 
 ## Documentation
-For docs, check [doc page][https://murabei-opensource-codes.github.io/pumpwood-djangoviews/pumpwood-djangoviews/src/pumpwood_djangoviews.html].
+For docs, check [doc page](https://murabei-opensource-codes.github.io/pumpwood-djangoviews/pumpwood-djangoviews/src/pumpwood_djangoviews.html).
