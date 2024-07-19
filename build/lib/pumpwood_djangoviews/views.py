@@ -211,7 +211,8 @@ class PumpWoodRestService(viewsets.ViewSet):
 
     ###############################
     # Gui attribute get functions #
-    def get_gui_retrieve_fieldset(self) -> List[dict]:
+    @classmethod
+    def get_gui_retrieve_fieldset(cls) -> List[dict]:
         """
         Return gui_retrieve_fieldset attribute.
 
@@ -221,9 +222,10 @@ class PumpWoodRestService(viewsets.ViewSet):
         Returns:
             Return `gui_retrieve_fieldset` attribute.
         """
-        return self.gui_retrieve_fieldset
+        return cls.gui_retrieve_fieldset
 
-    def get_gui_verbose_field(self) -> str:
+    @classmethod
+    def get_gui_verbose_field(cls) -> str:
         """
         Return gui_verbose_field attribute.
 
@@ -233,9 +235,10 @@ class PumpWoodRestService(viewsets.ViewSet):
         Returns:
             Return `gui_verbose_field` attribute.
         """
-        return self.gui_verbose_field
+        return cls.gui_verbose_field
 
-    def get_gui_readonly(self) -> List[str]:
+    @classmethod
+    def get_gui_readonly(cls) -> List[str]:
         """
         Return gui_readonly attribute.
 
@@ -245,19 +248,20 @@ class PumpWoodRestService(viewsets.ViewSet):
         Returns:
             Return `gui_readonly` attribute.
         """
-        return self.gui_readonly
+        return cls.gui_readonly
 
-    def get_list_fields(self):
+    @classmethod
+    def get_list_fields(cls):
         """
         Return list_fields from associated serializer.
 
         This function can be overwriten to add custom funcionalities
-        to get `self.serializer().get_list_fields()` data.
+        to get `cls.serializer().get_list_fields()` data.
 
         Returns:
             Return list_fields for model.
         """
-        serializer_obj = self.serializer()
+        serializer_obj = cls.serializer()
         return serializer_obj.get_list_fields()
     ########################
 

@@ -1,24 +1,17 @@
 Metadata-Version: 2.1
 Name: pumpwood-djangoviews
-Version: 0.45.0
+Version: 0.45.1
 Summary: Assist creating views for Django using Pumpwood pattern.
 Home-page: https://github.com/Murabei-OpenSource-Codes/pumpwood-djangoviews
 Author: Murabei Data Science
 Author-email: a.baceti@murabei.com
 License: BSD-3-Clause License
+Platform: UNKNOWN
 Classifier: Programming Language :: Python :: 3
 Classifier: Operating System :: OS Independent
 Requires-Python: >=3.6
 Description-Content-Type: text/markdown
 License-File: LICENSE
-Requires-Dist: requests
-Requires-Dist: simplejson
-Requires-Dist: pandas
-Requires-Dist: djangorestframework<3.13
-Requires-Dist: Django<4.0.0
-Requires-Dist: Shapely>=1.7.0
-Requires-Dist: geopandas>=0.8.1
-Requires-Dist: pumpwood-i8n>=0.1
 
 # PumpWood Django Views
 Assists creation of django views in a Pumpwood pattern. It make it possible
@@ -35,32 +28,7 @@ to use
   </a> which has a symbiotic relation with ants (Murabei)
 </p>
 
-## Quick start
-PumpWoodRestService helps creating
+## Documentation
+For docs, check [doc page](https://murabei-opensource-codes.github.io/pumpwood-djangoviews/pumpwood-djangoviews/src/pumpwood_djangoviews.html).
 
-```
-from .views import PumpWoodRestService
 
-class RestUser(PumpWoodRestService):
-    """End-point with information about Pumpwood users."""
-
-    endpoint_description = "Users"
-    notes = "End-point with user information"
-    dimensions = {
-        "microservice": "pumpwood-auth-app",
-        "service_type": "core",
-        "service": "auth",
-        "type": "user",
-    }
-    icon = None
-
-    service_model = User
-    serializer = SerializerUser
-    list_fields = [
-        "pk", "model_class", 'username', 'email', 'first_name',
-        'last_name', 'last_login', 'date_joined', 'is_active', 'is_staff',
-        'is_superuser', 'is_microservice', 'dimensions', 'extra_fields',
-        'all_permissions', 'group_permissions', 'user_profile']
-    foreign_keys = {}
-
-```
