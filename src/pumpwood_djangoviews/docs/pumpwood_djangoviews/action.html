@@ -701,16 +701,16 @@ action pumpwood end-points.</p>
 
             <div class="docstring"><p>__init__.</p>
 
-<h6 id="arguments">Arguments:</h6>
-
-<ul>
-<li><strong>func [Callable]:</strong>  Function that will be decorated with @action Pumpwood
-decorator.</li>
-<li><strong>info [str]:</strong>  Function information that will be returned at [GET] <code>actions</code>
-to user.</li>
-<li><strong>auth_header [str]:</strong>  Function argument that will be populated with <code><a href="#Action.auth_header">auth_header</a></code>
-when executing the function.</li>
-</ul>
+<p>Args:
+    func [Callable]:
+        Function that will be decorated with @action Pumpwood
+        decorator.
+    info [str]:
+        Function information that will be returned at [GET] <code>actions</code>
+        to user.
+    auth_header [str]:
+        Function argument that will be populated with <code><a href="#Action.auth_header">auth_header</a></code>
+        when executing the function.</p>
 </div>
 
 
@@ -852,24 +852,18 @@ from the function.</p>
 
             <div class="docstring"><p>Return dict representation of the action.</p>
 
-<h6 id="returns">Returns:</h6>
-
-<blockquote>
-  <p>Return a dictonary used to serialize action to action end-point.
-  Keys avaiable:</p>
-  
-  <ul>
-  <li><strong>action_name [str]</strong>: Name of the function.</li>
-  <li><strong>is_static_function [bool]</strong>: Boolean value indicating if
-  the function is a classmethod or staticmethod.</li>
-  <li><strong>info [str]</strong>: Information that will be avaiable to user using
-  action end-points.</li>
-  <li><strong>return [str]</strong>: Type of the return of the function.</li>
-  <li><strong>parameters [dict]</strong>: Arguments of the function with
-  information of types, default values.</li>
-  <li><strong>doc_string [str]</strong>: Doc string associated with the function.</li>
-  </ul>
-</blockquote>
+<p>Returns:
+    Return a dictonary used to serialize action to action end-point.
+    Keys avaiable:
+    - <strong>action_name [str]</strong>: Name of the function.
+    - <strong>is_static_function [bool]</strong>: Boolean value indicating if
+        the function is a classmethod or staticmethod.
+    - <strong>info [str]</strong>: Information that will be avaiable to user using
+        action end-points.
+    - <strong>return [str]</strong>: Type of the return of the function.
+    - <strong>parameters [dict]</strong>: Arguments of the function with
+        information of types, default values.
+    - <strong>doc_string [str]</strong>: Doc string associated with the function.</p>
 </div>
 
 
@@ -940,23 +934,17 @@ from the function.</p>
 
             <div class="docstring"><p>Define decorator that will convert the function into a rest action.</p>
 
-<h6 id="arguments">Arguments:</h6>
-
-<ul>
-<li><strong>info [str]:</strong>  Just an information about the decorated function that will be
-returned in GET /rest/<model_class>/actions/.</li>
-<li><strong>auth_header [str]:</strong>  Variable that will receive the auth_header, this can be used
-at the function to impersonation of the user to call other
-microservices.</li>
-</ul>
-
-<h6 id="returns">Returns:</h6>
-
-<blockquote>
-  <p>Return decorated function.</p>
-</blockquote>
-
-<p>Example:</p>
+<p>Args:
+    info [str]:
+        Just an information about the decorated function that will be
+        returned in GET /rest/<model_class>/actions/.
+    auth_header [str]:
+        Variable that will receive the auth_header, this can be used
+        at the function to impersonation of the user to call other
+        microservices.
+Returns:
+    Return decorated function.
+Example:</p>
 
 <div class="pdoc-code codehilite">
 <pre><span></span><code><span class="kn">from</span> <span class="nn"><a href="">pumpwood_djangoviews.action</a></span> <span class="kn">import</span> <span class="n">action</span>
@@ -1091,21 +1079,17 @@ microservices.</li>
 
             <div class="docstring"><p>Cast arguments to its original types.</p>
 
-<h6 id="arguments">Arguments:</h6>
-
-<ul>
-<li><strong>func [Callable]:</strong>  Function that parameters will be casted according to function
-arguments tips.</li>
-<li><strong>parameters [dict]:</strong>  Parameters received at execute action end-point, they will be
-casted according to funciton tips.</li>
-<li><strong>request:</strong>  Django request.</li>
-</ul>
-
-<h6 id="returns">Returns:</h6>
-
-<blockquote>
-  <p>Return parameters casted according to tips at function arguments.</p>
-</blockquote>
+<p>Args:
+    func [Callable]:
+        Function that parameters will be casted according to function
+        arguments tips.
+    parameters [dict]:
+        Parameters received at execute action end-point, they will be
+        casted according to funciton tips.
+    request:
+        Django request.
+Returns:
+    Return parameters casted according to tips at function arguments.</p>
 </div>
 
 

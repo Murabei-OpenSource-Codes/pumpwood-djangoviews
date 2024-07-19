@@ -8,6 +8,7 @@ consumed by the client side.
 import os
 from slugify import slugify
 from django.conf.urls import url
+from rest_framework.routers import BaseRouter
 from django.core.exceptions import ImproperlyConfigured
 from pumpwood_djangoviews.views import (
     PumpWoodRestService, PumpWoodDataBaseRestService)
@@ -45,7 +46,6 @@ class PumpWoodRouter(BaseRouter):
     """
 
     def get_default_base_name(self, viewset):
-        """."""
         return viewset.service_model.__name__
 
     def register(self, viewset):
@@ -54,6 +54,10 @@ class PumpWoodRouter(BaseRouter):
 
         Args:
             viewset: A view set from rest framework.
+        Raises:
+            ImproperlyConfigured:
+                If view is not a PumpWoodRestService for PumpWoodRouter and
+                PumpWoodDataBaseRestService for PumpWoodDataBaseRouter.
         """
         base_name = self.get_default_base_name(viewset)
         suffix = os.getenv('ENDPOINT_SUFFIX', '').lower()
@@ -61,7 +65,16 @@ class PumpWoodRouter(BaseRouter):
         self.registry.append((viewset, base_name))
 
     def validate_view(self, viewset):
-        """Validate if View is an PumpWoodRestService."""
+        """
+        Validate if view is of correct type.
+
+        Args:
+            viewset: Rest framework view set, it must have inherited from
+            PumpWoodRestService.
+        Raises:
+            ImproperlyConfigured:
+                If view is not a PumpWoodRestService.
+        """
         if PumpWoodRestService not in viewset.__bases__:
             raise ImproperlyConfigured(
                 "PumpWoodRouter applied over a view that isn't a "
@@ -107,6 +120,8 @@ class PumpWoodRouter(BaseRouter):
         Returns:
             Return a list of URLs associated with model_class with Pumpwood
             end-points.
+
+        @private
         """
         self.validate_view(viewset)
 

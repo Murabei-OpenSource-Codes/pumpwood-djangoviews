@@ -1451,19 +1451,21 @@ circular fetching.</p>
 
             <div class="docstring"><p>__init__.</p>
 
-<h6 id="arguments">Arguments:</h6>
-
-<ul>
-<li><strong>source [str]:</strong>  Source attribute that contains id value associated with
-a foreign key.</li>
-<li><strong>microservice [PumpWoodMicroService]:</strong>  PumpWoodMicroService object that will be used to fetch
-information of the object associated with foreign key id.</li>
-<li><strong>model_class [str]:</strong>  Model class that will be used to request information at
-with a retrieve.</li>
-<li><strong>display_field [str]:</strong>  Field that will be set as <code>__display_field__</code> at object
-dictonary.</li>
-<li><strong>fields List [str]:</strong>  List of the fields that should be returned at the object.</li>
-</ul>
+<p>Args:
+    source [str]:
+        Source attribute that contains id value associated with
+        a foreign key.
+    microservice [PumpWoodMicroService]:
+        PumpWoodMicroService object that will be used to fetch
+        information of the object associated with foreign key id.
+    model_class [str]:
+        Model class that will be used to request information at
+        with a retrieve.
+    display_field [str]:
+        Field that will be set as <code>__display_field__</code> at object
+        dictonary.
+    fields List [str]:
+        List of the fields that should be returned at the object.</p>
 </div>
 
 
@@ -3104,13 +3106,9 @@ so that we can present a helpful representation of the object.</p>
 
             <div class="docstring"><p>Get list fields from serializer.</p>
 
-<h6 id="arguments">Arguments:</h6>
-
-<ul>
-<li>No Args.</li>
-</ul>
-
-<p>Return [list]:
+<p>Args:
+    No Args.
+Return [list]:
     Default fields to be used at list and retrive with
     default_fields=True.</p>
 </div>
@@ -3151,19 +3149,11 @@ so that we can present a helpful representation of the object.</p>
 
             <div class="docstring"><p>Return a dictonary with all foreign_key fields.</p>
 
-<h6 id="arguments">Arguments:</h6>
-
-<ul>
-<li>No Args.</li>
-</ul>
-
-<h6 id="kwargs">Kwargs:</h6>
-
-<blockquote>
-  <p>No Kwargs.</p>
-</blockquote>
-
-<p>Return [dict]:
+<p>Args:
+    No Args.
+Kwargs:
+    No Kwargs.
+Return [dict]:
     Return a dictionary with field name as keys and relation
     information as value.</p>
 </div>
@@ -3204,19 +3194,11 @@ so that we can present a helpful representation of the object.</p>
 
             <div class="docstring"><p>Return a dictionary with all related fields (M2M).</p>
 
-<h6 id="arguments">Arguments:</h6>
-
-<ul>
-<li>No Args.</li>
-</ul>
-
-<h6 id="kwargs">Kwargs:</h6>
-
-<blockquote>
-  <p>No Kwargs.</p>
-</blockquote>
-
-<p>Return [dict]:
+<p>Args:
+    No Args.
+Kwargs:
+    No Kwargs.
+Return [dict]:
     Return a dictionary with field name as keys and relation
     information as value.</p>
 </div>

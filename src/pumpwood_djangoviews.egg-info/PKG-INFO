@@ -14,6 +14,8 @@ License-File: LICENSE
 Requires-Dist: requests
 Requires-Dist: simplejson
 Requires-Dist: pandas
+Requires-Dist: djangorestframework<3.13
+Requires-Dist: Django<4.0.0
 Requires-Dist: Shapely>=1.7.0
 Requires-Dist: geopandas>=0.8.1
 Requires-Dist: pumpwood-i8n>=0.1
@@ -26,7 +28,7 @@ to use
 </a> to communicate with end-points.
 
 <p align="center" width="60%">
-  <img src="doc/sitelogo-horizontal.png" /> <br>
+  <img src="static_doc/sitelogo-horizontal.png" /> <br>
 
   <a href="https://en.wikipedia.org/wiki/Cecropia">
     Pumpwood is a native brasilian tree
@@ -34,7 +36,7 @@ to use
 </p>
 
 ## Quick start
-PumpWoodRestService helps creating 
+PumpWoodRestService helps creating
 
 ```
 from .views import PumpWoodRestService

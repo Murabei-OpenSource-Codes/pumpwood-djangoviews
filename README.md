@@ -6,7 +6,7 @@ to use
 </a> to communicate with end-points.
 
 <p align="center" width="60%">
-  <img src="doc/sitelogo-horizontal.png" /> <br>
+  <img src="static_doc/sitelogo-horizontal.png" /> <br>
 
   <a href="https://en.wikipedia.org/wiki/Cecropia">
     Pumpwood is a native brasilian tree
@@ -14,7 +14,7 @@ to use
 </p>
 
 ## Quick start
-PumpWoodRestService helps creating 
+PumpWoodRestService helps creating
 
 ```
 from .views import PumpWoodRestService

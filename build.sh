@@ -3,7 +3,8 @@ sed -e 's#{VERSION}#'"${VERSION}"'#g' setup_template.py > setup.py
 
 python3 setup.py build sdist bdist_wheel
 
-pdoc --docformat="google" src/pumpwood_djangoviews -o ./docs
+cd django_dev
+python mk_docs.py
 
 git add --all
 git commit -m "Building a new version ${VERSION}"

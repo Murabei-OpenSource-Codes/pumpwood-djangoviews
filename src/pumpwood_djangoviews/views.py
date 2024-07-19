@@ -1,97 +1,262 @@
-"""Create views using Pumpwood pattern."""
+"""
+Create views using Pumpwood pattern.
+
+Define base views associated with Pumpwood end-points.
+"""
 import os
 import pandas as pd
 import simplejson as json
 import datetime
 import pumpwood_djangoauth.i8n.translate as _
+import copy
 from io import BytesIO
-from typing import List
+from typing import List, Union
+from django.db import models
 from django.http import HttpResponse
-from django.core.exceptions import ImproperlyConfigured
-
-# Treat for development error when importing module without Django App
-try:
-    from rest_framework import viewsets, status
-except ImproperlyConfigured:
-    class viewsets:
-        class ViewSet:
-            pass
-
+from django.db.models.fields import NOT_PROVIDED
+from django.db.models.fields.files import FieldFile
+from rest_framework import viewsets, status
 from rest_framework.response import Response
 from werkzeug.utils import secure_filename
+from pumpwood_miscellaneous.storage import PumpWoodStorage
 from pumpwood_communication import exceptions
-from django.db.models.fields import NOT_PROVIDED
+from pumpwood_communication.microservices import PumpWoodMicroService
 from pumpwood_djangoviews.renderer import PumpwoodJSONRenderer
 from pumpwood_djangoviews.query import filter_by_dict
 from pumpwood_djangoviews.action import load_action_parameters
 from pumpwood_djangoviews.aux.map_django_types import django_map
-from django.db.models.fields.files import FieldFile
 from pumpwood_djangoviews.serializers import (
     MicroserviceForeignKeyField, MicroserviceRelatedField,
-    LocalForeignKeyField, LocalRelatedField)
+    LocalForeignKeyField, LocalRelatedField, DynamicFieldsModelSerializer)
 
 
 def save_serializer_instance(serializer_instance):
+    """
+    Save instant using serializer and raise if any validation error.
+
+    Is is not valid acording to serializer validation, raise error.
+
+    Args:
+        serializer_instance:
+            Serializer with an object to be saved.
+    Returns:
+        New object updated or created.
+    Raises:
+        PumpWoodObjectSavingException:
+            'Error when validating fields when saving object'. Raise error if
+            validation of serializer is not correct. It will return error
+            dictonary at error payload.
+    """
     is_valid = serializer_instance.is_valid()
     if is_valid:
         return serializer_instance.save()
     else:
-        raise exceptions.PumpWoodException(
-            message="Error when validating fields for saving object",
+        raise exceptions.PumpWoodObjectSavingException(
+            message="Error when validating fields when saving object",
             payload=serializer_instance.errors)
 
 
 class PumpWoodRestService(viewsets.ViewSet):
-    """Basic View-Set for pumpwood rest end-points."""
+    """
+    Basic View-Set for pumpwood rest end-points.
+
+    Example:
+    ```python
+    from metabase.models import MetabaseDashboard
+    from metabase.serializers import MetabaseDashboardSerializer
+    from config import storage_object, microservice
+
+
+    class RestMetabaseDashboard(PumpWoodRestService):
+        endpoint_description = "Metabase Dashboard"
+        notes = "Register and generate url to embed Metabase dashboards"
+
+        # Django model that will be mapped to this end-point
+        service_model = MetabaseDashboard
+
+        # Serializer that will be used to dump model data
+        serializer = MetabaseDashboardSerializer
+
+        # PumpwoodStorage object that will be used to save and retrieve
+        # file data from storage.
+        storage_object = storage_object
+
+        # PumpWoodMicroService object used to communicate with other
+        # microservice if necessary. Ex: Trigger ETL Jobs on object
+        # saving and update.
+        microservice = microservice
+
+        # Fields that will be considered as files and extensions that
+        # will be accepted.
+        file_fields = {
+            'file': ['json', 'xlsx']
+        }
+
+        ###########################################################
+        # Gui this information will be returned at retrieve_options
+        # to help frontend correctly render app frontend.
+        # Set field sets, grouping the fields and hiding those that
+        # ar not listed on fieldsets
+        gui_retrieve_fieldset = [{
+                "name": "main",
+                "fields": [
+                    "status", "alias", "description", "notes",
+                    "dimensions", "updated_by", "updated_at"]
+            }, {
+                "name": "embedding",
+                "fields": [
+                    "metabase_id", "auto_embedding", "object_model_class",
+                    "object_pk"]
+            }, {
+                "name": "config",
+                "fields": [
+                    "expire_in_min", "default_theme",
+                    "default_is_bordered", "default_is_titled"]
+            }, {
+                "name": "extra_info",
+                "fields": ["extra_info"]
+            }
+        ]
+
+        # This fields will be set as readonly if fill_options_validation
+        # is called with query parameter `?user_type=gui`
+        gui_readonly = ["updated_by_id", "updated_at", "extra_info"]
+
+        # Indication how the object could be presented to user
+        gui_verbose_field = '{pk} | {description}'
+    ```
+    """
 
     _view_type = "simple"
     renderer_classes = [PumpwoodJSONRenderer]
 
     #####################
     # Route information #
-    endpoint_description = None
-    dimensions = {}
-    icon = None
+    endpoint_description: str = None
+    """Description of the end-point, this information will be avaiable at
+       `rest/pumpwood/endpoints/` for frontend. This information will be
+       saved at KongRoute, it must be unique for all microservices"""
+    dimensions: dict = {}
+    """Dimensions associated with end-points. This information will be saved
+       at KongRoute dimensions."""
+    icon: str = None
+    """Icon associated with model class. This information will be saved
+       at KongRoute icon field."""
     #####################
 
-    service_model = None
-    storage_object = None
-    microservice = None
-    trigger = False
+    service_model: models.Model
+    """Django model associated end-points will be made avaiable."""
+    storage_object: PumpWoodStorage
+    """PumpwoodStorage object that will be used to save and retrieve
+       file data from storage."""
+    microservice: PumpWoodMicroService
+    """PumpWoodMicroService object used to communicate with other
+       microservice if necessary. Ex: Trigger ETL Jobs on object
+       saving and update."""
+    trigger: bool = False
+    """If should be called ELTTrigger at ETL microservice at saving, deleting
+       and executing actions. Default value is False."""
 
     # List fields
-    serializer = None
+    serializer: DynamicFieldsModelSerializer
+    """Serializer that will be used to dump data on end-points."""
     file_fields = {}
+    """File fields associated with model, it is a dictonary with keys as
+       field keys and values as a list of accepted extensions."""
 
     # Front-end uses 50 as limit to check if all data have been fetched,
     # if change this parameter, be sure to update front-end list component.
-    list_paginate_limit = 50
+    list_paginate_limit: int = 50
+    """List end-point pagination default limit."""
 
     #######
     # Gui #
-    list_fields = None
-    gui_retrieve_fieldset: dict = None
+    gui_retrieve_fieldset: List[dict] = None
+    """Retrieve field set to be passed to gui from `retrieve_view_options`.
+       It is a list of dictonary with keys name for name of the viewset and
+       fields for the fields that are associated.
+
+       Example:
+       ```python
+       gui_retrieve_fieldset = [{
+               "name": "main",
+               "fields": [
+                   "status", "alias", "description", "notes",
+                   "dimensions", "updated_by", "updated_at"]
+           }, {
+               "name": "embedding",
+               "fields": [
+                   "metabase_id", "auto_embedding", "object_model_class",
+                   "object_pk"]
+           }, {
+               "name": "config",
+               "fields": [
+                   "expire_in_min", "default_theme",
+                   "default_is_bordered", "default_is_titled"]
+           }, {
+               "name": "extra_info",
+               "fields": ["extra_info"]
+           }
+       ]
+       ```
+    """
     gui_verbose_field: str = 'pk'
+    """Suggest verbose for object using information from object. It is set
+       as python string format, default `pk`. Ex: `{pk} | {description}` will
+       use information from `pk` and `description` keys."""
     gui_readonly: List[str] = []
+    """Set readonly fields when calling with `user_type=gui` for
+       `fill_options_validation` end-point."""
     #######
 
-    ########################
-    # Get class attributes #
-    def get_gui_retrieve_fieldset(self):
-        """Return gui_retrieve_fieldset attribute."""
-        # Set pk as verbose field if none is set
+    ###############################
+    # Gui attribute get functions #
+    def get_gui_retrieve_fieldset(self) -> List[dict]:
+        """
+        Return gui_retrieve_fieldset attribute.
+
+        This function can be overwriten to add custom funcionalities
+        to get `gui_retrieve_fieldset` attribute.
+
+        Returns:
+            Return `gui_retrieve_fieldset` attribute.
+        """
         return self.gui_retrieve_fieldset
 
-    def get_gui_verbose_field(self):
-        """Return gui_verbose_field attribute."""
+    def get_gui_verbose_field(self) -> str:
+        """
+        Return gui_verbose_field attribute.
+
+        This function can be overwriten to add custom funcionalities
+        to get `gui_verbose_field` attribute.
+
+        Returns:
+            Return `gui_verbose_field` attribute.
+        """
         return self.gui_verbose_field
 
-    def get_gui_readonly(self):
-        """Return gui_readonly attribute."""
+    def get_gui_readonly(self) -> List[str]:
+        """
+        Return gui_readonly attribute.
+
+        This function can be overwriten to add custom funcionalities
+        to get `gui_readonly` attribute.
+
+        Returns:
+            Return `gui_readonly` attribute.
+        """
         return self.gui_readonly
 
     def get_list_fields(self):
-        """Return list_fields attribute."""
+        """
+        Return list_fields from associated serializer.
+
+        This function can be overwriten to add custom funcionalities
+        to get `self.serializer().get_list_fields()` data.
+
+        Returns:
+            Return list_fields for model.
+        """
         serializer_obj = self.serializer()
         return serializer_obj.get_list_fields()
     ########################
@@ -111,27 +276,54 @@ class PumpWoodRestService(viewsets.ViewSet):
                          allowed_extensions=str(allowed_extensions))]
         return []
 
-    def list(self, request):
+    def list(self, request) -> List[dict]:
         """
         View function to list objects with pagination.
 
-        Number of objects are limited by
-        settings.REST_FRAMEWORK['PAGINATE_BY']. To get next page, use
+        Number of objects are limited by. To get next page, use
         exclude_dict['pk__in': [list of the received pks]] to get more
         objects.
 
-        Use to limit the query .query.filter_by_dict function.
+        ..: notes:
+            Models with deleted field will have objects with deleted=True
+            excluded by default from results. To retrive these objects
+            explicity define `exclude_dict` `{'deleted': None}` or
+            `{'deleted': False}`.
 
-        :param request.data['filter_dict']: Dictionary passed as
-                                            objects.filter(**filter_dict)
-        :type request.data['filter_dict']: dict
-        :param request.data['exclude_dict']: Dictionary passed as
-                                             objects.exclude(**exclude_dict)
-        :type request.data['exclude_dict']: dict
-        :param request.data['order_by']: List passed as
-                                             objects.order_by(*order_by)
-        :type request.data['order_by']: list
-        :return: A list of objects using list_serializer
+        Use to limit the query .query.filter_by_dict function. Request
+        expected parameters and query parameters are listed bellow:
+
+        ###### Request payload data:
+        - **filter_dict [dict] = {}:**
+            Dictionary passed as `model.objects.filter(**filter_dict)`.<br>
+        - **exclude_dict [dict] = {}:**
+            Dictionary passed as
+            `model.objects.exclude(**filter_dict)`.<br>
+        - **order_by [dict] = []:**
+            Dictionary passed as `model.objects.exclude(*order_by)`.<br>
+        - **limit [int] = None:**
+            Limit of the query result, if not set attribute
+            `list_paginate_limit` will be used insted.<br>
+        - **fields [List[str]] = []:**
+            List of fields that should be returned on results objects.<br>
+        - **default_fields [bool] = False:**
+            If serializer `list_fields` should be used to filter the
+            returned fields.<br>
+        - **foreign_key_fields [bool] = False:**
+            If foreign keys should be returned with object data.<br>
+
+        ###### Request query data:
+        No query data.
+
+        Args:
+            request: Django request object.
+        Returns:
+            Return the result of the query limited to
+            `list_paginate_limit` attribute. Objects are serialized
+            using `serializer` attribute.
+        Raises:
+            PumpWoodQueryException:
+                Raise if any error when treating the request.
         """
         try:
             request_data = request.data
@@ -143,6 +335,21 @@ class PumpWoodRestService(viewsets.ViewSet):
             default_fields = request_data.pop("default_fields", False)
             foreign_key_fields = request_data.pop("foreign_key_fields", False)
 
+            ################################################################
+            # Do not display deleted objects if not explicity set to display
+            exclude_dict = request_data.get("exclude_dict", {})
+            if hasattr(self.service_model, 'deleted'):
+                exclude_dict_keys = exclude_dict.keys()
+                any_delete = False
+                for key in exclude_dict_keys:
+                    first = key.split("__")[0]
+                    if first == "deleted":
+                        any_delete = True
+                        break
+                if not any_delete:
+                    exclude_dict["deleted"] = True
+            ################################################################
+
             arg_dict = {'query_set': self.service_model.objects.all()}
             arg_dict.update(request_data)
             query_set = filter_by_dict(**arg_dict)[:list_paginate_limit]
@@ -151,30 +358,51 @@ class PumpWoodRestService(viewsets.ViewSet):
                 query_set, many=True, fields=fields,
                 foreign_key_fields=foreign_key_fields,
                 default_fields=default_fields).data)
-
-        except TypeError as e:
+        except Exception as e:
             raise exceptions.PumpWoodQueryException(message=str(e))
 
     def list_without_pag(self, request):
-        """List data without pagination.
+        """
+        View function to list objects **without** pagination.
 
-        View function to list objects. Basicaley the same of list, but without
-        limitation by settings.REST_FRAMEWORK['PAGINATE_BY'].
+        ..: notes:
+            Models with deleted field will have objects with deleted=True
+            excluded by default from results. To retrive these objects
+            explicity define `exclude_dict` `{'deleted': None}` or
+            `{'deleted': False}`.
 
-        :param request.data['filter_dict']: Dictionary passed as
-                                            objects.filter(**filter_dict)
-        :type request.data['filter_dict']: dict
-        :param request.data['exclude_dict']: Dictionary passed as
-                                             objects.exclude(**exclude_dict)
-        :type request.data['exclude_dict']: dict
-        :param request.data['order_by']: List passed as
-            objects.order_by(*order_by)
+        .. warning::
+            Be careful with the number of the objects that will be fetched!
+            This end-point does not paginate data returning all information
+            of query result.
 
-        :type request.data['order_by']: list
-        :return: A list of objects using list_serializer
+        ###### Request payload data:
+        - **filter_dict [dict] = {}:**
+            Dictionary passed as `model.objects.filter(**filter_dict)`.<br>
+        - **exclude_dict [dict] = {}:**
+            Dictionary passed as
+            `model.objects.exclude(**filter_dict)`.<br>
+        - **order_by [dict] = []:**
+            Dictionary passed as `model.objects.exclude(*order_by)`.<br>
+        - **fields [List[str]] = []:**
+            List of fields that should be returned on results objects.<br>
+        - **default_fields [bool] = False:**
+            If serializer `list_fields` should be used to filter the
+            returned fields.<br>
+        - **foreign_key_fields [bool] = False:**
+            If foreign keys should be returned with object data.<br>
 
-        .. note::
-            Be careful with the number of the objects that will be retrieved
+        ###### Request query data:
+        No query data.
+
+        Args:
+            request: Django request object.
+        Returns:
+            Return the result of the query **without** pagination . Objects
+            are serialized using `serializer` attribute.
+        Raises:
+            PumpWoodQueryException:
+                Raise if any error when treating the request.
         """
         try:
             request_data = request.data
@@ -183,6 +411,21 @@ class PumpWoodRestService(viewsets.ViewSet):
             fields = request_data.pop("fields", None)
             default_fields = request_data.pop("default_fields", False)
             foreign_key_fields = request_data.pop("foreign_key_fields", False)
+
+            ################################################################
+            # Do not display deleted objects if not explicity set to display
+            exclude_dict = request_data.get("exclude_dict", {})
+            if hasattr(self.service_model, 'deleted'):
+                exclude_dict_keys = exclude_dict.keys()
+                any_delete = False
+                for key in exclude_dict_keys:
+                    first = key.split("__")[0]
+                    if first == "deleted":
+                        any_delete = True
+                        break
+                if not any_delete:
+                    exclude_dict["deleted"] = True
+            ################################################################
 
             arg_dict = {'query_set': self.service_model.objects.all()}
             arg_dict.update(request_data)
@@ -197,14 +440,34 @@ class PumpWoodRestService(viewsets.ViewSet):
             raise exceptions.PumpWoodQueryException(
                 message=str(e))
 
-    def retrieve(self, request, pk=None):
+    def retrieve(self, request, pk=None) -> dict:
         """
         Retrieve view, uses the retrieve_serializer to return object with pk.
 
-        :param int pk: Object pk to be retrieve
-        :return: The representation of the object passed by
-                 self.retrieve_serializer
-        :rtype: dict
+        Query parameters are loaded as json data, ex:
+        `json.loads(request.query_params.get('fields', 'null'))`
+
+        ###### Request payload data:
+        GET request only, does not have payload.
+
+        ###### Request query data:
+        - **fields [List[str]] = None:** List of the fields that should be
+            returned.
+        - **foreign_key_fields [bool] = False:** If foreign key should be
+            returned with object data.
+        - **related_fields [bool] = False:** If related fields should be
+            returned with object data.
+        - **default_fields [bool] = False:** If only serializer list_fields
+            should be returned.
+
+        Args:
+            request [pk]:
+                Django request.
+            int [pk]:
+                Object pk to be retrieve
+        Returns:
+            The representation of the object with pk dumped by
+            self.serializer using arguments passed on query parameters.
         """
         ##########################
         # Get serializer options #
@@ -224,32 +487,58 @@ class PumpWoodRestService(viewsets.ViewSet):
             foreign_key_fields=foreign_key_fields,
             related_fields=related_fields,
             default_fields=default_fields).data
-
         return Response(response_data)
 
-    def retrieve_file(self, request, pk: int):
+    def retrieve_file(self, request, pk: int) -> bytes:
         """
         Read file without stream.
 
-        Args:
-            pk (int): Pk of the object to save file field.
-            file_field(str): File field to receive stream file.
+        .. warning::
+            This end-point will read de file from storage and them return the
+            request. Be carefull when retriving large files (greater than
+            10Mb).
 
+        ###### Request payload data:
+        GET request only, does not have payload.
+
+        ###### Request query data:
+        - **file_field [str]:** File field to receive stream file.
+            returned with object data.
+
+        Args:
+            pk [int]:
+                Pk of the object to save file field.
         Returns:
-            A stream of bytes with da file.
+            Return a file associated with object pk, file field `file_field`
+            read from storage.
+        Raises:
+            PumpWoodForbidden:
+                '{field} must be set on file_fields dictionary.'. Indicates
+                that the requested file field was not found on view
+                `file_fields` attribute.
+            PumpWoodForbidden:
+                'storage_object not set'. Indicates that the `storage_object`
+                attribute is not set at view. This view can not perform
+                file operations.
+            PumpWoodObjectDoesNotExist:
+                'field [{}] is not set at object'. Indicates that requested
+                file field is not set on object.
         """
         if self.storage_object is None:
             raise exceptions.PumpWoodForbidden(
                 "storage_object not set")
 
-        file_field = request.query_params.get('file-field', None)
+        file_field = request.query_params.get('file_field', None)
         if file_field not in self.file_fields.keys():
             msg = (
-                "'{file_field}' must be set on file_fields "
-                "dictionary.").format(file_field=file_field)
-            raise exceptions.PumpWoodForbidden(msg)
-        obj = self.service_model.objects.get(id=pk)
+                "'{field}' must be set on file_fields dictionary."
+            ).format(field=file_field)
+            raise exceptions.PumpWoodForbidden(
+                msg, payload={
+                    'field': file_field,
+                    file_field: 'not_found'})
 
+        obj = self.service_model.objects.get(id=pk)
         file_path = getattr(obj, file_field)
         if isinstance(file_path, FieldFile):
             file_path = file_path.name
@@ -266,29 +555,70 @@ class PumpWoodRestService(viewsets.ViewSet):
             'attachment; filename=%s' % file_name
         return response
 
-    def delete(self, request, pk=None):
+    def delete(self, request, pk=None) -> dict:
         """
         Delete view.
 
-        :param int pk: Object pk to be retrieve
+        .. notes::
+            If model has deleted field, the default behaviour will set this
+            field to True not deleting the object. To force deletion it is
+            necessary to use query paramenter `force_delete=True`
+
+        ###### Request payload data:
+        GET request only, does not have payload.
+
+        ###### Request query data:
+        - **force_delete [bool] = False:** Force deletion of models that
+            have `deleted` field. If False, object with deleted
+            will not be deleted, but deleted will be set as True.
+
+        Args:
+            request: Django request.
+            pk [int]: Object pk to be retrieve.
+        Returns:
+            Return the object that was removed.
         """
         obj = self.service_model.objects.get(pk=pk)
+        force_delete = json.loads(request.query_params.get(
+            'force_delete', 'false'))
         return_data = self.serializer(obj, many=False).data
 
-        obj.delete()
+        # If object has deleted field, set it to True if force_delete
+        # parameter is not set, this will function for objects that
+        # deletion is not a good pratice for keep data audit.
+        if hasattr(obj, 'deleted') and not force_delete:
+            obj.deleted = True
+            obj.save()
+        else:
+            obj.delete()
         return Response(return_data, status=200)
 
-    def delete_many(self, request):
+    def delete_many(self, request) -> bool:
         """
         Delete many data using filter.
 
-        :param request.data['filter_dict']: Dictionary passed as
-                                            objects.filter(**filter_dict)
-        :type request.data['filter_dict']: dict
-        :param request.data['exclude_dict']: Dictionary passed as
-                                             objects.exclude(**exclude_dict)
-        :type request.data['exclude_dict']: dict
-        :return: True if delete is ok
+        .. warning::
+            This action will delete all objects that satisfies the query
+            filter_dict and exclude_dict. It will also delete objects with
+            deleted fields. **THIS REQUEST CAN NOT BE UNDONE**.
+
+        ###### Request payload data:
+        GET request only, does not have payload.
+
+        ###### Request query data:
+        - **filter_dict [dict] = {}:**
+            Dictionary passed as `model.objects.filter(**filter_dict)`.<br>
+        - **exclude_dict [dict] = {}:**
+            Dictionary passed as
+            `model.objects.exclude(**filter_dict)`.<br>
+
+        Args:
+            request: Django request.
+        Returns:
+            True if operation has completed.
+        Raises:
+            PumpWoodObjectDeleteException:
+                If any error raised when performing request.
         """
         try:
             arg_dict = {'query_set': self.service_model.objects.all()}
@@ -297,22 +627,34 @@ class PumpWoodRestService(viewsets.ViewSet):
             query_set = filter_by_dict(**arg_dict)
             query_set.delete()
             return Response(True, status=200)
-        except TypeError as e:
-            raise exceptions.PumpWoodQueryException(
+        except Exception as e:
+            raise exceptions.PumpWoodObjectDeleteException(
                 message=str(e))
 
     def remove_file_field(self, request, pk: int) -> bool:
         """
         Remove file field.
 
+        ###### Request payload data:
+        GET request only, does not have payload.
+
+        ###### Request query data:
+        - **file_field [str]:**
+            File field associated with a file that will be removed.<br>
+
         Args:
-            pk (int): pk of the object.
-        Kwargs:
-            No kwargs for this function.
+            request: Django request.
+            pk [int]: pk of the object.
+        Returns:
+            True if the object was removed.
         Raises:
-            PumpWoodForbidden: If file_file is not in file_fields keys of the
-                view.
-            PumpWoodException: Propagates exceptions from storage_objects.
+            PumpWoodForbidden:
+                'file_field must be set on self.file_fields dictionary.'.
+                Indicates that `file_file` is not in file_fields keys of
+                the view.
+            PumpWoodObjectDoesNotExist:
+                'field [{}] not found at object'. Indicates that file was not
+                found on storage.
         """
         file_field = request.query_params.get('file_field', None)
         if file_field not in self.file_fields.keys():
@@ -335,17 +677,34 @@ class PumpWoodRestService(viewsets.ViewSet):
         except Exception as e:
             raise exceptions.PumpWoodException(str(e))
 
-    def save(self, request):
+    def save(self, request) -> dict:
         """
         Save and update object acording to request.data.
 
         Object will be updated if request.data['pk'] is not None.
 
-        :param dict request.data: Object representation as
-            self.retrieve_serializer
-        :raise PumpWoodException: 'Object model class diferent from
-            {service_model} : {service_model}' request.data['service_model']
-                not the same as self.service_model.__name__
+        ###### Request payload data:
+        Object to be saved. If a pk is set them the object will be updated,
+        if pk is None or not set a new object will be created.
+
+        ###### Request query data:
+        No query parameters.
+
+        Args:
+            request: Django request.
+        Returns:
+            Serialized new/updated object.
+
+        Raises:
+            PumpWoodException:
+                'Object model class diferent from {service_model} :
+                {service_model}'. Indicates that the end-point and the
+                model_class of the object are impatible.
+            PumpWoodObjectSavingException:
+                'Error when validating fields when saving object'. Indicates
+                that there were error when validating object
+                at the serializer. Error payload will have the fields with
+                error as keys of the dictonary.
         """
         request_data: dict = None
         if "application/json" in request.content_type.lower():
@@ -440,8 +799,12 @@ class PumpWoodRestService(viewsets.ViewSet):
         return Response(
             self.serializer(saved_obj).data, status=response_status)
 
-    def get_actions(self):
-        """Get all actions with action decorator."""
+    def _get_actions(self):
+        """
+        Get all actions with action decorator.
+
+        @private
+        """
         # this import works here only
         import inspect
         function_dict = dict(inspect.getmembers(
@@ -454,9 +817,51 @@ class PumpWoodRestService(viewsets.ViewSet):
             if getattr(func, 'is_action', False)}
         return actions
 
-    def list_actions(self, request):
-        """List model exposed actions."""
-        actions = self.get_actions()
+    def list_actions(self, request) -> List[dict]:
+        """
+        List model exposed actions.
+
+        ###### Request payload data:
+        No payload.
+
+        ###### Request query data:
+        No query parameters.
+
+        Args:
+            request: Django request.
+        Returns:
+            Return a list of dictonary with information of the avaiable
+            actions for model class. Actions info object keys:
+            - **action_name [str]:** Name of the function associated with
+                action on model_class.
+            - **action_name__verbose [str]:** Name of the function associated
+                with action on model_class translates by Pumpwood I8s.
+            - **doc_string [str]:** Doc string associated with function.
+            - **info [str]:** Info for que action passed as argument at action
+                function decorator.
+            - **info__verbose [str]:** Info for que action passed as argument
+                at action function decorator model_class translates by
+                Pumpwood I8s.
+            - **is_static_function [bool]:** Boolean value setting if function
+                is classmethod or staticmethod (True), in this cases it is not
+                associated with an object and aa pk should no be passed as
+                argument.
+            - **parameters [dict]:** Dictionary with paramenter as key and with
+                keys:
+                - **default_value [any]:** Default value for paramenter.
+                - **many [bool]:** If the function parameter is many (list).
+                - **required [bool]:** If the parameter is necessary to run the
+                    function or optinal.
+                - **type [str]:** Type of the paramenter that shoul be passed
+                    to function.
+                - **verbose_name [str]:** Parameter name translated using
+                    Pumpwood I8s.
+            - **return [dict]:** A dictionary with the type associated with
+                function return. Keys:
+                - **many [bool]:** If the return result is a list.
+                - **type [str]:** Type of the return.
+        """
+        actions = self._get_actions()
         action_descriptions = []
         translation_tag_template = "{model_class}__action__{action}"
         model_class = self.service_model.__name__
@@ -476,22 +881,56 @@ class PumpWoodRestService(viewsets.ViewSet):
                 item["verbose_name"] = _.t(
                     sentence=key, tag=tag + "__parameters")
             #########################################################
-
             action_descriptions.append(action_dict)
+
         return Response(action_descriptions)
 
-    def list_actions_with_objects(self, request):
-        """List model exposed actions acording to selected objects."""
-        actions = self.get_actions()
-        action_descriptions = [
-            action.action_object.description
-            for name, action in actions.items()]
-        return Response(action_descriptions)
+    def execute_action(self, request, action_name, pk=None) -> dict:
+        """
+        Execute action over object or class using parameters.
 
-    def execute_action(self, request, action_name, pk=None):
-        """Execute action over object or class using parameters."""
+        ###### Request payload data:
+        Payload dictionary correspont to function parameters as key->value
+        elements.
+
+        ###### Request query data:
+        No query parameters.
+
+        Args:
+            request:
+                Django request.
+            action_name [str]:
+                Action name.
+            pk [pk]:
+                Of the object that will be used to run the action. For
+                staticmethods and classmethods the object should not be
+                passed as argument.
+        Returns:
+            Return a dictonary with keys:
+            -
+        Raises:
+            PumpWoodActionArgsException:
+                'Action [{action}] at model [{class_name}] is not
+                a classmethod and not pk provided.'. Indicates that the action
+                is not a classmethod and the pk was not passed as function
+                argument.
+            PumpWoodActionArgsException:
+                'Action [{action}] at model [{class_name}] is a
+                classmethod and pk provided.'. Indicates that the action is
+                a classmethod, but a pk was passed as argument.
+            PumpWoodObjectDoesNotExist:
+                'Requested object {service_model}[{pk}] not found.'.
+                Indicates that the object with [pk] was not found on
+                database.
+            PumpWoodActionArgsException:
+                'error when unserializing function arguments: [...]'.
+                Indicates that it was not possible to unserialize objects
+                passed as function arguments. Pumpwood used function tips
+                types to convert the arguments on correct types before
+                passing them to function.
+        """
         parameters = request.data
-        actions = self.get_actions()
+        actions = self._get_actions()
         rest_action_names = list(actions.keys())
 
         if action_name not in rest_action_names:
@@ -559,8 +998,46 @@ class PumpWoodRestService(viewsets.ViewSet):
             'parameters': parameters, 'object': object_dict})
 
     @classmethod
-    def cls_fields_options(cls):
-        """Return field options using serializer."""
+    def cls_fields_options(cls) -> dict:
+        """
+        Return field options using serializer.
+
+        Args:
+            No args.
+        Returns:
+            Return information for each column to render search filters on
+            frontend. Each field will have:
+            - **column [str]:** Name of the column associated with the
+                field (same as the key).
+            - **column__verbose [str]:** Name of the collumns translated
+                using Pumpwood I8s.
+            - **default [str]:** Defult value for column.
+            - **extra_info [str]:** Extra information for the collumns
+                can be used to pass information about foreign key or
+                related fields.
+            - **help_text [str]:** Help text associated with the collumn.
+            - **help_text__verbose [str]:** Help text associated with the
+                collumn translated using Pumpwood I8s.
+            - **indexed [str]:** If this column is indexed.
+            - **nullable [str]:** If this column is nullable.
+            - **primary_key [str]:** If this column is part of the primary
+                key of the table. This is use full for tables with
+                composite pk.
+            - **read_only [str]:** If this column is read-only on
+                end-point. The results for this value may differ from
+                fill_validation due to `gui_readonly`.
+            - **type [str]:** Type of the column, will return Python types.
+            - **unique [str]:** If this column has an unique restriction.
+            - **in [str]:** If column type is options, this key will
+                indicates the accepted values for this field. This element
+                is a dictonary with keys:
+                - **description:** Human readble value for option.
+                - **description__verbose:** Human readble value for
+                    option translated by Pumpwood I8s.
+                - **value:** Value of the option that will be saved on
+                    database, for save end-points use this value to
+                    modify the object.
+        """
         fields = cls.service_model._meta.get_fields()
         dict_fields = {}
         for f in fields:
@@ -672,7 +1149,8 @@ class PumpWoodRestService(viewsets.ViewSet):
                         sentence=choice[1], tag=tag + "__choices")
                     in_list[choice[0]] = {
                         "description": choice[1],
-                        "description__verbose": description}
+                        "description__verbose": description,
+                        "value": choice[0]}
                 column_info["in"] = in_list
 
             # Set autoincrement for primary keys
@@ -768,11 +1246,7 @@ class PumpWoodRestService(viewsets.ViewSet):
         """
         Return options to be used in list funciton.
 
-        :return: Dictionary with options for list parameters
-        :rtype: dict
-
-        .. note::
-            Must be implemented
+        THIS END-POINT IS DEPRECTED
         """
         return Response(self.cls_fields_options())
 
@@ -780,12 +1254,7 @@ class PumpWoodRestService(viewsets.ViewSet):
         """
         Return options for object update acording its partial data.
 
-        :param dict request.data: Partial object data.
-        :return: A dictionary with options for diferent objects values
-        :rtype: dict
-
-        .. note::
-            Must be implemented
+        THIS END-POINT IS DEPRECTED
         """
         return Response(self.cls_fields_options())
 
@@ -793,16 +1262,50 @@ class PumpWoodRestService(viewsets.ViewSet):
         """
         Return information to render list views on frontend.
 
+        ###### Request payload data:
+        No payload data.
+
+        ###### Request query data:
+        No query parameters.
+
         Args:
-            No args.
-        Kwargs:
-            No Kwargs.
-        Return [dict]:
+            request: Django request.
+        Returns:
             Return a dictionary with keys:
-            - list_fields[List[str]]: Return a list of fields that should be
-                redendered on list view.
-            - field_type [dict]: Return information for each column to
-                render search filters on frontend.
+            - **list_fields[List[str]]:** Return a list of default list fields
+                that should be redendered on list view.
+            - **field_type [dict]:** Return information for each column to
+                render search filters on frontend. Each field will have:
+                - **column [str]:** Name of the column associated with the
+                    field (same as the key).
+                - **column__verbose [str]:** Name of the collumns translated
+                    using Pumpwood I8s.
+                - **default [str]:** Defult value for column.
+                - **extra_info [str]:** Extra information for the collumns
+                    can be used to pass information about foreign key or
+                    related fields.
+                - **help_text [str]:** Help text associated with the collumn.
+                - **help_text__verbose [str]:** Help text associated with the
+                    collumn translated using Pumpwood I8s.
+                - **indexed [str]:** If this column is indexed.
+                - **nullable [str]:** If this column is nullable.
+                - **primary_key [str]:** If this column is part of the primary
+                    key of the table. This is use full for tables with
+                    composite pk.
+                - **read_only [str]:** If this column is read-only on
+                    end-point. The results for this value may differ from
+                    fill_validation due to `gui_readonly`.
+                - **type [str]:** Type of the column, will return Python types.
+                - **unique [str]:** If this column has an unique restriction.
+                - **in [str]:** If column type is options, this key will
+                    indicates the accepted values for this field. This element
+                    is a dictonary with keys:
+                    - **description:** Human readble value for option.
+                    - **description__verbose:** Human readble value for
+                        option translated by Pumpwood I8s.
+                    - **value:** Value of the option that will be saved on
+                        database, for save end-points use this value to
+                        modify the object.
         """
         list_fields = self.get_list_fields()
         fields_options = self.cls_fields_options()
@@ -817,27 +1320,54 @@ class PumpWoodRestService(viewsets.ViewSet):
         Field set are set using gui_retrieve_fieldset attribute of the
         class. It is used classes to define each fieldset.
 
-        Args:
-            No Args.
-        Kwargs:
-            No Kwargs.
-        Return [dict]:
-            Return a dictonary with information to render retrieve
-            views on front-ends. Keys:
-             - fieldset [dict]: A dictionary with inline tabs names as
-                key and fields that will be redendered.
+        ###### Request payload data:
+        No payload data.
 
-            Exemple:
-            {
-                "fieldset": {
-                    "Nome da tab. 1": {
-                        "fields": ["field1", "field2", "field3"]
-                    },
-                    "Nome da tab. 2": {
-                        "fields": ["field1"]
-                    }
-                }
-            }
+        ###### Request query data:
+        No query parameters.
+
+        Args:
+            request: Django request.
+        Returns:
+            Return a dictonary with information to render retrieve
+            views on front-ends. Returns a dictonary with keys:
+            - **fieldset [List[dict]]:** A list of dictionaries with
+                information for rendering the retrieve page on frontend.
+                - **fields [List[str]]:** List of fields to be rendered at
+                    fieldset.
+                - **name [str]:** Name of the fieldset.
+                - **name__verbose [str]:** Name of the fieldset translated
+                    using Pumpwood I8s.
+            - **verbose_field [str]:** String that can be used to create
+                user readble string at frontend.
+
+            Example:
+            ```python
+            {'fieldset': [{
+                'fields': [
+                    'status', 'alias', 'description', 'notes', 'dimensions',
+                    'updated_by', 'updated_at'],
+                'name__verbose': 'main'
+                'name': 'main'},
+              {
+                'fields': [
+                    'metabase_id', 'auto_embedding',
+                    'object_model_class', 'object_pk'],
+                'name__verbose': 'embedding'
+                'name': 'embedding'},
+              {
+                'fields': [
+                    'expire_in_min', 'default_theme', 'default_is_bordered',
+                    'default_is_titled'],
+                'name__verbose': 'config'
+                'name': 'config'},
+              {
+                'fields': ['extra_info'],
+                'name__verbose': 'extra_info'
+                'name': 'extra_info'
+              }],
+             'verbose_field': '{pk} | {description}'}
+            ```
         """
         gui_retrieve_fieldset = self.get_gui_retrieve_fieldset()
         gui_verbose_field = self.get_gui_verbose_field()
@@ -851,38 +1381,49 @@ class PumpWoodRestService(viewsets.ViewSet):
             all_columns.sort()
             return Response({
                 "verbose_field": gui_verbose_field,
-                "fieldset": {
-                    None: {
-                        "fields": all_columns
-                    }
-                }
-            })
-        return Response({
-            "verbose_field": gui_verbose_field,
-            "fieldset": gui_retrieve_fieldset})
+                "fieldset": {None: {"fields": all_columns}}})
+        else:
+            return_gui_retrieve_fieldset = copy.deepcopy(gui_retrieve_fieldset)
+            model_class = self.service_model.__name__
+            tag_template = "{model_class}__fieldset_name__{fieldset_name}"
+            for fieldset in return_gui_retrieve_fieldset:
+                fieldset_name = fieldset["name"]
+                tag = tag_template.format(
+                    model_class=model_class, fieldset_name=fieldset_name)
+                name__verbose = _.t(sentence=fieldset_name, tag=tag)
+                fieldset["name__verbose"] = name__verbose
+            return Response({
+                "verbose_field": gui_verbose_field,
+                "fieldset": return_gui_retrieve_fieldset})
 
     def fill_options_validation(self, request) -> dict:
         """
         Return fill options for retrieve/save pages.
 
-        It will validate partial data fill and return erros if necessary.
+        It will validate partial data fill return update fill options and
+        raise validation errors if necessary.
 
+        ###### Request payload data:
+        Partially filled data to be validated by the backend.
+
+        ###### Request query data:
+        - **user_type[str]:**
+            Must be in ['api', 'gui']. It will return the options according
+            to interface user is using. When requesting using 'gui',
+            self.gui_readonly field will be setted as read-only.
+        - **field [str]:**
+            Set to validade an specific field. If not set all
+            fields will be validated. Validation must be implemented.
         Args:
-            partial_data [dict]: Partially filled data to be validated by
-                the backend.
-
-        Kwargs:
-            user_type[str]: Must be in ['api', 'gui']. It will return the
-                options according to interface user is using. When requesting
-                using gui, self.gui_readonly field will be setted as read-only.
-            field [str]: Set to validade an specific field. If not set all
-                fields will be validated.
+            request: Django request.
         Return [dict]:
-            Return a dictionary
+            Return an dictonary with `field_descriptions` generated by
+            `cls_fields_options` and `gui_readonly` indicating the fields
+            that will be set as read-only if user_type='gui'
         """
         user_type: str = request.query_params.get('user_type', 'api')
         field: str = request.query_params.get('field', 'field')
-        partial_data = request.data
+        partial_data: dict = request.data
 
         gui_readonly = self.get_gui_readonly()
         fill_options = self.cls_fields_options()
@@ -894,14 +1435,19 @@ class PumpWoodRestService(viewsets.ViewSet):
             for key, item in fill_options.items():
                 if key in gui_readonly:
                     item["read_only"] = True
-
         return Response({
             "field_descriptions": fill_options,
             "gui_readonly": gui_readonly})
 
 
 class PumpWoodDataBaseRestService(PumpWoodRestService):
-    """This view extends PumpWoodRestService, including pivot function."""
+    """
+    This view extends PumpWoodRestService, including pivot function.
+
+    This view will make data end-points avaiable at frontend for retriving
+    data without the use of serializers using pivot end-point and bulk
+    save of data using bulk-save end-point.
+    """
 
     _view_type = "data"
 
@@ -911,44 +1457,74 @@ class PumpWoodDataBaseRestService(PumpWoodRestService):
     expected_cols_bulk_save = []
     """Set the collumns needed at bulk_save."""
 
-    def pivot(self, request):
+    def pivot(self, request) -> Union[list, dict]:
         """
         Pivot QuerySet data acording to columns selected, and filters passed.
 
-        :param request.data['filter_dict']: Dictionary passed as
-            objects.filter(**filter_dict)
-        :type request.data['filter_dict']: dict
-        :param request.data['exclude_dict']: Dictionary passed as
-            objects.exclude(**exclude_dict)
-        :type request.data['exclude_dict']: dict
-        :param request.data['order_by']: List passed as
-            objects.order_by(*order_by)
-        :type request.data['order_by']: list
-        :param request.data['columns']: Variables to be used as pivot collumns
-        :type request.data['columns']: list
-        :param request.data['format']: Format used in
-            pandas.DataFrame().to_dict()
-        :type request.data['columns']: str
+        ###### Request payload data:
+        `filter_dict`, `exclude_dict` and `order_by` parameters have same
+        behaviour as list end-point.
 
-        :return: Return database data pivoted acording to columns parameter
-        :rtyoe: panas.Dataframe converted to disctionary
+        - **columns [List[str]]:**
+            List of variables that will be considered as collumns to pivot
+            data.
+        - **format [{‘dict’, ‘list’, ‘series’, ‘split’, ‘tight’, ‘records’,
+            ‘index’}]:** Format paramter to convert pandas DataFrame to
+            dictonary. This dictonary will be returned by the function.
+        - **variables [List[str]]:** Variables to be returned, this will
+            modify default behaviour of returning `model_variables` attribute
+            fields.
+        - **show_deleted [bool]:** If model has deleted field, results
+            flaged as deleted won't be fetched. Setting show_deleted = True
+            will return this filtered results.
+        - **add_pk_column [bool]:** If True, pk columns will be added to
+            results. Using pk columns will not permit to pivot information
+            (makes no sense). So far only `id` column will be added to results
+            treating composite pks is on the roadmap.
+        - **limit [int]:** Limit of the query results (number of objects that
+            will be returned).
+
+        ###### Request query data:
+        No query parameters.
+
+        Returns:
+            Return a pandas DataFrame serialized according to format
+            parameter.
+        Raises:
+            PumpWoodForbidden:
+                'Pivot is not avaiable, set model_variables at view'. Indicates
+                that this end-point is not avaiable. To habilitate it, it is
+                necessary to set `model_variables` attribute at view.
+            PumpWoodQueryException:
+                'Columns must be a list of elements.'. Indicates that columns
+                type is not a list of strings.
+            PumpWoodQueryException:
+                'Column chosen as pivot is not at model variables'. Indicates
+                that column is not present on `model_variables` attribute.
+            PumpWoodQueryException:
+                Propagate errors raised when executing the query.
+            PumpWoodQueryException:
+                'value column not at melted data, it is not possible
+                 to pivot dataframe.'. Indicates that value column is not
+                 avaiable query results, so it not possible to pivot data.
         """
         if self.model_variables is None:
             msg = "Pivot is not avaiable, set model_variables at view"
-            raise exceptions.PumpWoodException(msg)
+            raise exceptions.PumpWoodForbidden(msg)
 
         columns = request.data.get('columns', [])
         format = request.data.get('format', 'list')
-        model_variables = request.data.get('variables')
+        model_variables = (
+            request.data.get('variables') or self.model_variables)
         show_deleted = request.data.get('show_deleted', False)
-        model_variables = model_variables or self.model_variables
+        add_pk_column = request.data.get('add_pk_column', False)
+        limit = request.data.get('limit', None)
 
-        print("columns:", columns)
         if type(columns) is not list:
-            raise exceptions.PumpWoodException(
+            raise exceptions.PumpWoodQueryException(
                 'Columns must be a list of elements.')
         if len(set(columns) - set(model_variables)) != 0:
-            raise exceptions.PumpWoodException(
+            raise exceptions.PumpWoodQueryException(
                 'Column chosen as pivot is not at model variables')
 
         index = list(set(model_variables) - set(columns))
@@ -960,10 +1536,24 @@ class PumpWoodDataBaseRestService(PumpWoodRestService):
             if not show_deleted:
                 filter_dict["deleted"] = False
 
-        arg_dict = {'query_set': self.service_model.objects.all(),
-                    'filter_dict': filter_dict,
-                    'exclude_dict': exclude_dict,
-                    'order_by': order_by}
+        #############################
+        # Add id columns to results #
+        # TODO: Add other fields if set as composite primary key.
+        if add_pk_column:
+            if len(columns) != 0:
+                raise exceptions.PumpWoodException(
+                    "Can not add pk column and pivot information")
+            model_variables = ['id'] + model_variables
+
+        # Limit pivot results if limit parameter is set
+        query_set = self.service_model.objects.all()
+        if limit is not None:
+            query_set = query_set[:int(limit)]
+
+        arg_dict = {
+            'query_set': query_set,
+            'filter_dict': filter_dict, 'exclude_dict': exclude_dict,
+            'order_by': order_by}
         query_set = filter_by_dict(**arg_dict)
 
         try:
@@ -982,7 +1572,7 @@ class PumpWoodDataBaseRestService(PumpWoodRestService):
             return Response({})
         else:
             if "value" not in melted_data.columns:
-                raise exceptions.PumpWoodException(
+                raise exceptions.PumpWoodQueryException(
                     "'value' column not at melted data, it is not possible"
                     " to pivot dataframe.")
 
@@ -993,26 +1583,55 @@ class PumpWoodDataBaseRestService(PumpWoodRestService):
             return Response(
                 pivoted_table.reset_index().to_dict(format))
 
-    def bulk_save(self, request):
-        """
+    def bulk_save(self, request) -> dict:
+        r"""
         Bulk save data.
 
-        Args:
-            data_to_save(list): List of dictionaries which must have
-                                self.expected_cols_bulk_save.
-        Return:
-            dict: ['saved_count']: total of saved objects.
-        """
-        data_to_save = request.data
-        if data_to_save is None:
-            raise exceptions.PumpWoodException(
-                'Post payload must have data_to_save key.')
+        This end-point is prefereble for large datainputs on Pumpwood, it is
+        not possible to update entries, just add new ones.
 
+        It is much more performant than adding one by one using save
+        end-point.
+
+        ###### Request payload data:
+        List of dictionaries which must have self.expected_cols_bulk_save.
+
+        ###### Request query data:
+        No query parameters.
+
+        Args:
+            request: Django request.
+        Returns:
+            A dictonary with key `saved_count` indicating the number of
+            objects that were add to database.
+        Raises:
+            PumpWoodForbidden:
+                'Bulk save not avaiable. Set expected_cols_bulk_save on
+                PumpWoodDataBaseRestService View to habilitate funciton.'
+                Indicates that bulk_save end-point was not configured
+                for this model class. It is necessary to set
+                `expected_cols_bulk_save` attribute to make end-point
+                avaiable.
+            PumpWoodObjectSavingException:
+                'Post payload is a list of objects.'. Indicates that the
+                request payload is not a list as expected.
+            PumpWoodObjectSavingException:
+                'Expected columns and data columns do not match:
+                \nExpected columns:{expected}
+                \nData columns:{data_cols}'. Indicates that the fields passed
+                on the objects are diferent from the expected by the end-point
+                check the data or the configuration of the end-point.
+        """
         if len(self.expected_cols_bulk_save) == 0:
             msg = (
                 "Bulk save not avaiable. Set expected_cols_bulk_save on "
                 "PumpWoodDataBaseRestService View to habilitate funciton.")
-            raise exceptions.PumpWoodException(msg)
+            raise exceptions.PumpWoodForbidden(msg)
+
+        data_to_save = request.data
+        if type(data_to_save) is not list:
+            raise exceptions.PumpWoodObjectSavingException(
+                'Post payload is a list of objects.')
 
         pd_data_to_save = pd.DataFrame(data_to_save)
         pd_data_cols = set(list(pd_data_to_save.columns))
@@ -1026,9 +1645,12 @@ class PumpWoodDataBaseRestService(PumpWoodRestService):
             self.service_model.objects.bulk_create(objects_to_load)
             return Response({'saved_count': len(objects_to_load)})
         else:
-            template = 'Expected columns and data columns do not match:' + \
-                '\nExpected columns:{expected}' + \
-                '\nData columns:{data_cols}'
-            raise exceptions.PumpWoodException(template.format(
-                expected=set(self.expected_cols_bulk_save),
-                data_cols=pd_data_cols,))
+            msg = (
+                'Expected columns and data columns do not match:' +
+                '\nExpected columns:{expected}' +
+                '\nData columns:{data_cols}')
+            raise exceptions.PumpWoodObjectSavingException(
+                    message=msg,
+                    payload={
+                        "expected": list(self.expected_cols_bulk_save),
+                        "data_cols": pd_data_cols})
