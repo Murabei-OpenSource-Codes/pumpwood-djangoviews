@@ -1,5 +1,5 @@
+"""Make documentation using pydocs."""
 import django
-from django.core import management
 from django.conf import settings
 from pdoc import pdoc
 from pdoc.render import configure
