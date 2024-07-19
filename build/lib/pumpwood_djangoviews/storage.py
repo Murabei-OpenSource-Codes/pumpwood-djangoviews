@@ -14,9 +14,11 @@ class PumpwoodStorage(Storage):
         It will use enviroment variable to set the object.
 
         Args:
-            name [str]: Full name of the file.
-            content: File content
-        Return [str]:
+            name [str]:
+                Full name of the file.
+            content:
+                File content.
+        Returns:
             Final name of the file at storage location.
         """
         saved_file_name = storage_object.write_file(
@@ -33,7 +35,7 @@ class PumpwoodStorage(Storage):
 
         Args:
             name [str]: Full name of the file.
-        Return [bool]:
+        Returns:
             True if file already exists.
         """
         return storage_object.check_file_exists(name)
@@ -47,8 +49,9 @@ class PumpwoodStorage(Storage):
         from storage.
 
         Args:
-            name [str]: Full name of the file.
-        Return [str]:
+            name [str]:
+                Full name of the file.
+        Returns:
             Return the absolute path of the file.
         """
         # Check if media path was set as absolute

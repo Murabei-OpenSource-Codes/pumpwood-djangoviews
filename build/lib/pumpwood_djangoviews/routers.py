@@ -1,22 +1,51 @@
-"""Define defult Routers for Pumpwood systems."""
+"""
+Define defult Routers for Pumpwood systems.
+
+Pumpwood end-points have defaults paths that are registered at the application.
+The end-points are mapped using pumpwood-communication package to be
+consumed by the client side.
+"""
 import os
-from django.conf.urls import url
-from django.core.exceptions import ImproperlyConfigured
 from slugify import slugify
+from django.conf.urls import url
 from rest_framework.routers import BaseRouter
-from .views import PumpWoodRestService, PumpWoodDataBaseRestService
+from django.core.exceptions import ImproperlyConfigured
+from pumpwood_djangoviews.views import (
+    PumpWoodRestService, PumpWoodDataBaseRestService)
 
 
 class PumpWoodRouter(BaseRouter):
     """
     Define a Router for PumpWoodRestService views.
 
-    :raise ImproperlyConfigured: If a view different from
-        PumpWoodRestService is used
+    Router are used to define default end-points for Pumpwood for each
+    model_class.
+
+    Raises:
+        ImproperlyConfigured:
+            If a view different from PumpWoodRestService is used.
+    Example:
+        Example of url.py file at Pumpwood Auth package.
+        ```python
+        from urllib.parse import urljoin
+        from django.urls import path
+        from django.conf.urls import url
+        from pumpwood_djangoviews.routers import PumpWoodRouter
+        from pumpwood_djangoauth.config import storage_object, MEDIA_URL
+        from pumpwood_djangoauth.metabase import views
+
+        pumpwoodrouter = PumpWoodRouter()
+        pumpwoodrouter.register(viewset=views.RestMetabaseDashboard)
+        pumpwoodrouter.register(viewset=views.RestMetabaseDashboardParameter)
+
+        urlpatterns = [
+        ]
+
+        urlpatterns += pumpwoodrouter.urls
+        ```
     """
 
     def get_default_base_name(self, viewset):
-        """."""
         return viewset.service_model.__name__
 
     def register(self, viewset):
@@ -25,6 +54,10 @@ class PumpWoodRouter(BaseRouter):
 
         Args:
             viewset: A view set from rest framework.
+        Raises:
+            ImproperlyConfigured:
+                If view is not a PumpWoodRestService for PumpWoodRouter and
+                PumpWoodDataBaseRestService for PumpWoodDataBaseRouter.
         """
         base_name = self.get_default_base_name(viewset)
         suffix = os.getenv('ENDPOINT_SUFFIX', '').lower()
@@ -32,14 +65,64 @@ class PumpWoodRouter(BaseRouter):
         self.registry.append((viewset, base_name))
 
     def validate_view(self, viewset):
-        """."""
+        """
+        Validate if view is of correct type.
+
+        Args:
+            viewset: Rest framework view set, it must have inherited from
+            PumpWoodRestService.
+        Raises:
+            ImproperlyConfigured:
+                If view is not a PumpWoodRestService.
+        """
         if PumpWoodRestService not in viewset.__bases__:
             raise ImproperlyConfigured(
                 "PumpWoodRouter applied over a view that isn't a "
                 "PumpWoodRestService")
 
     def get_registry_pattern(self, viewset, basename):
-        """."""
+        """
+        Register patterns for pumpwood end-points.
+
+        Base name is set acording to Model name (model_class).
+
+        Patterns registered:
+        - `[POST] rest/{basename}/list/`: List end-point with pagination.
+        - `[POST] rest/{basename}/list-without-pag/`: List end-point without
+            pagination.
+        - `[GET] rest/{basename}/retrieve/{pk}/`: Retrieve data for an
+            [pk] object.
+        - `[GET] rest/{basename}/retrieve-file/{pk}/`: Retrieve a file
+            from [pk] object.
+        - `[DELETE] rest/{basename}/remove-file-field/{pk}/`: Remove a
+            file from [pk] object.
+        - `[DELETE] rest/{basename}/delete/{pk}/`: Remove an object
+            from database.
+        - `[POST] rest/{basename}/delete/`: Remove all object acording to a
+            query dictonary.
+        - `[POST] rest/{basename}/save/`: Create/Update an object.
+        - `[GET] rest/{basename}/actions/`: List all avaiable actions for
+            model_class
+        - `[POST] rest/{basename}/actions/{action_name}/{pk}/`: Execute an
+            action over an object of pk.
+        - `[POST] rest/{basename}/actions/{action_name}/`: Execute an
+            action associated with a classmethod or staticmethod (not
+            associated with an object).
+        - `[GET,POST] rest/{basename}/options/`: Get request will return
+            information about fields of model_class. POST can be used to
+            parcial fill of the object. This end-point is DEPRECTED.
+        - `[GET] rest/{basename}/list-options/`: Return information that can
+            be used to render list pages.
+        - `[GET,POST] rest/{basename}/retrieve-options/`: GET Return
+            information that can be used to render retrieve pages. POST will
+            validate parcial object information.
+
+        Returns:
+            Return a list of URLs associated with model_class with Pumpwood
+            end-points.
+
+        @private
+        """
         self.validate_view(viewset)
 
         resp_list = []
@@ -169,8 +252,14 @@ class PumpWoodDataBaseRouter(PumpWoodRouter):
     """
     Define a Router for PumpWoodDataBaseRestService views.
 
-    :raise ImproperlyConfigured: If a view different from
-        PumpWoodDataBaseRestService is used
+    Add some data routes to PumpWoodRouter.
+
+    Patterns registered:
+        - `[POST] rest/{basename}/pivot/`: Retrieve data according to
+            query dictonary without deserializing using serializers (return
+            the Pandas dataframe converted with to_dict([format])).
+        - `[POST] rest/{basename}/bulk-save/`: Save many objects at same
+            time, it can be used to upload large datasets.
     """
 
     def validate_view(self, viewset):

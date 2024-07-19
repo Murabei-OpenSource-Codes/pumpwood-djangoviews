@@ -1,19 +1,115 @@
-"""Define actions decorator."""
+"""
+Define actions decorator.
+
+Define action decorator that can be used to expose function at execute
+action pumpwood end-points.
+
+Example of using the decorator to expose function to end-point:
+```python
+[...]
+
+class ExampleModel(models.Model):
+    STATUS = (
+        ("inactive", "Archived"),
+        ("dev", "Development"),
+        ("homolog", "Homologation"),
+        ("production", "Production"),
+    )
+
+    status = models.CharField(
+        choices=STATUS, max_length=15,
+        verbose_name="Status",
+        help_text="Status")
+    description = models.CharField(
+        null=False, max_length=100, unique=True,
+        verbose_name="Description",
+        help_text="Dashboard description")
+    notes = models.TextField(
+        null=False, default="", blank=True,
+        verbose_name="Notes",
+        help_text="A long description of the dashboard")
+    dimensions = models.JSONField(
+        encoder=PumpWoodJSONEncoder, null=False, default=dict,
+        blank=True,
+        verbose_name="Dimentions",
+        help_text="Key/Value Dimentions")
+
+    @action(info='Expose an action associated with an object')
+    # It is important to use the type tips to correctly convert the
+    # request payload to correct python types
+    def object_action(self, string_arg: str = None, int_arg: int) -> List[str]:
+
+        [...]
+
+    @classmethod
+    @action(info='Expose a classmethod')
+    def class_method(cls, list_of_dict_arg: List[dict]) -> bool:
+        # Class method will not receive pk when running execute_action
+        [...]
+
+    @action(info='Pass the auth_header as argument to function.',
+            auth_header="auth_header")
+    # Auth header will be passed to function as argument, it can be used to
+    # impersonate user using PumpWoodMicroserive.
+    def pass_auth_header_to_function(self, list_of_dict_arg: List[dict],
+                                     auth_header: dict) -> str:
+        # Passing auth header to microservice object will impersonate
+        # user.
+        related_fields_fetched = microservice.list(
+            model_class="MicroserviceRelatedModel",
+            filter_dict={"fk_field": self.id},
+            auth_header=auth_header)
+        [...]
+```
+"""
 import inspect
 import textwrap
 import pandas as pd
 import typing
 from datetime import date, datetime
 from typing import cast, Callable, Dict, List, Optional, cast
-
 from pumpwood_communication.exceptions import PumpWoodActionArgsException
 
 
 class Action:
     """Define a Action class to be used in decorator action."""
 
-    def __init__(self, func: Callable, info: str, auth_header: str = None):
-        """."""
+    func_return: str
+    """Type of the return associated with funciton."""
+    doc_string: str
+    """Doc string of the function"""
+    action_name: str
+    """Name of the function."""
+    is_static_function: bool
+    """True if funciton is staticmethod or a classmethod (does not require
+       an object to run)"""
+    parameters: dict
+    """Dictionary with function arguments with types and if it is necessary
+       (not set a default value) or opcional (with default value)."""
+    info: str
+    """Info associated with function that will be passed to user at [GET]
+       `action end-point.`"""
+    auth_header: str
+    """Function argument that will receive `auth_header` information.
+       auth_header can be to user impersonation when calling other end-points
+       from the function."""
+
+    def __init__(self, func: Callable, info: str,
+                 auth_header: str = None) -> Callable:
+        """
+        __init__.
+
+        Args:
+            func [Callable]:
+                Function that will be decorated with @action Pumpwood
+                decorator.
+            info [str]:
+                Function information that will be returned at [GET] `actions`
+                to user.
+            auth_header [str]:
+                Function argument that will be populated with `auth_header`
+                when executing the function.
+        """
         def extract_param_type(param) -> None:
             """Extract paramter type."""
             resp = {"many": False}
@@ -22,7 +118,7 @@ class Action:
                     resp["type"] = "Any"
                 else:
                     resp["type"] = type(param.default).__name__
-            elif type(param.annotation) == str:
+            elif type(param.annotation) is str:
                 resp["type"] = param.annotation
             elif isinstance(param.annotation, type):
                 resp["type"] = param.annotation.__name__
@@ -49,7 +145,7 @@ class Action:
             resp = {"many": False}
             if return_annotation == inspect.Parameter.empty:
                 resp["type"] = "Any"
-            elif type(return_annotation) == str:
+            elif type(return_annotation) is str:
                 resp["type"] = return_annotation
             elif isinstance(return_annotation, type):
                 resp["type"] = return_annotation.__name__
@@ -105,8 +201,23 @@ class Action:
         self.info = info
         self.auth_header = auth_header
 
-    def to_dict(self):
-        """Return dict representation of the action."""
+    def to_dict(self) -> dict:
+        """
+        Return dict representation of the action.
+
+        Returns:
+            Return a dictonary used to serialize action to action end-point.
+            Keys avaiable:
+            - **action_name [str]**: Name of the function.
+            - **is_static_function [bool]**: Boolean value indicating if
+                the function is a classmethod or staticmethod.
+            - **info [str]**: Information that will be avaiable to user using
+                action end-points.
+            - **return [str]**: Type of the return of the function.
+            - **parameters [dict]**: Arguments of the function with
+                information of types, default values.
+            - **doc_string [str]**: Doc string associated with the function.
+        """
         result = {
             "action_name": self.action_name,
             "is_static_function": self.is_static_function,
@@ -122,13 +233,43 @@ def action(info: str = "", auth_header: str = None):
     Define decorator that will convert the function into a rest action.
 
     Args:
-        info: Just an information about the decorated function that will be
-        returned in GET /rest/<model_class>/actions/.
-    Kwargs:
-        request_user (str): Variable that will receive logged user.
+        info [str]:
+            Just an information about the decorated function that will be
+            returned in GET /rest/<model_class>/actions/.
+        auth_header [str]:
+            Variable that will receive the auth_header, this can be used
+            at the function to impersonation of the user to call other
+            microservices.
     Returns:
-        func: Action decorator.
+        Return decorated function.
+    Example:
+    ```python
+    from pumpwood_djangoviews.action import action
 
+    [...]
+
+    # Action associated with a classmethod, is_static_function=True
+    # when returning information of the action. auth_header will
+    # be passed to function making possible to impersonate the user
+    @classmethod
+    @action(info='Dump dashboards and parameters', auth_header="auth_header")
+    def dump_dashboards(cls,
+                        dashboard_name: str,
+                        auth_header: dict,
+                        filter_alias: List[str] = None,
+                        exclude_alias: List[str] = None) -> List[str]:
+        test_data = microservice.retrieve(
+            model_class='TestEndPoint',
+            auth_header=auth_header)
+        [...]
+
+    # Action associated with a classmethod, is_static_function=False
+    # when returning information of the action. Auth header won't be passed
+    # as function argument.
+    @action(info='Dump dashboards and parameters')
+    def delete_dashboards(cls, dashboard_name: str) -> dict:
+        [...]
+    ```
     """
     def action_decorator(func):
         func.is_action = True
@@ -138,8 +279,22 @@ def action(info: str = "", auth_header: str = None):
     return action_decorator
 
 
-def load_action_parameters(func: Callable, parameters: dict, request):
-    """Cast arguments to its original types."""
+def load_action_parameters(func: Callable, parameters: dict, request) -> dict:
+    """
+    Cast arguments to its original types.
+
+    Args:
+        func [Callable]:
+            Function that parameters will be casted according to function
+            arguments tips.
+        parameters [dict]:
+            Parameters received at execute action end-point, they will be
+            casted according to funciton tips.
+        request:
+            Django request.
+    Returns:
+        Return parameters casted according to tips at function arguments.
+    """
     signature = inspect.signature(func)
     function_parameters = signature.parameters
     # Loaded parameters for action run
@@ -208,5 +363,4 @@ def load_action_parameters(func: Callable, parameters: dict, request):
         raise PumpWoodActionArgsException(
             status_code=400, message=error_msg, payload={
                 "arg_errors": errors})
-
     return return_parameters
