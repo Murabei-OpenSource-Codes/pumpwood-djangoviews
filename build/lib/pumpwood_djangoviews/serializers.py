@@ -180,7 +180,7 @@ class MicroserviceForeignKeyField(serializers.Field):
         if object_pk is None:
             return {"model_class": self.model_class}
 
-        object_data = self.microservice.retrive(
+        object_data = self.microservice.retrieve(
             model_class=self.model_class, pk=object_pk,
             default_fields=True, fields=self.fields)
         object_data['__display_field__'] = object_data.get(self.display_field)
