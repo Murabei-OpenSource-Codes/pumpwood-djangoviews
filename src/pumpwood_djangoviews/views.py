@@ -369,13 +369,13 @@ class PumpWoodRestService(viewsets.ViewSet):
         """
         View function to list objects **without** pagination.
 
-        ..: notes:
+        ..: notes::
             Models with deleted field will have objects with deleted=True
             excluded by default from results. To retrive these objects
             explicity define `exclude_dict` `{'deleted': None}` or
             `{'deleted': False}`.
 
-        .. warning::
+        ..: warning::
             Be careful with the number of the objects that will be fetched!
             This end-point does not paginate data returning all information
             of query result.
@@ -532,7 +532,7 @@ class PumpWoodRestService(viewsets.ViewSet):
             raise exceptions.PumpWoodForbidden(
                 "storage_object not set")
 
-        file_field = request.query_params.get('file_field', None)
+        file_field = request.query_params.get('file-field', None)
         if file_field not in self.file_fields.keys():
             msg = (
                 "'{field}' must be set on file_fields dictionary."
