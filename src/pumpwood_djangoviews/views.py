@@ -766,7 +766,7 @@ class PumpWoodRestService(viewsets.ViewSet):
                         file_path=file_path, file_name=filename,
                         data=file.read(),
                         content_type=file.content_type,
-                        if_exists='overide')
+                        if_exists='overwrite')
                     setattr(saved_obj, field, storage_filepath)
 
         if object_errors != {}:
