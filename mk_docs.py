@@ -45,7 +45,18 @@ settings.configure(
         'django.contrib.sites',
         'django.contrib.staticfiles',
         'rest_framework',
-        'rest_framework.authtoken',
+
+        # MFA Admin
+        'knox',
+
+        # Django Pumpwood Auth Models
+        'pumpwood_djangoauth',
+        'pumpwood_djangoauth.i8n',
+        'pumpwood_djangoauth.mfaadmin',
+        'pumpwood_djangoauth.registration',
+        'pumpwood_djangoauth.system',
+        'pumpwood_djangoauth.metabase',
+        'pumpwood_djangoauth.api_permission',
     ),
     PASSWORD_HASHERS=(
         'django.contrib.auth.hashers.MD5PasswordHasher',
