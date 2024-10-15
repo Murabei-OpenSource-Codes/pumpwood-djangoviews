@@ -532,7 +532,7 @@ class PumpWoodRestService(viewsets.ViewSet):
             raise exceptions.PumpWoodForbidden(
                 "storage_object not set")
 
-        file_field = request.query_params.get('file-field', None)
+        file_field = request.query_params.get('file_field', None)
         if file_field not in self.file_fields.keys():
             msg = (
                 "'{field}' must be set on file_fields dictionary."
@@ -660,7 +660,8 @@ class PumpWoodRestService(viewsets.ViewSet):
                 'field [{}] not found at object'. Indicates that file was not
                 found on storage.
         """
-        file_field = request.query_params.get('file-field', None)
+        file_field = request.query_params.get('file_field', None)
+        print("file_field:", file_field)
         if file_field not in self.file_fields.keys():
             raise exceptions.PumpWoodForbidden(
                 "file_field must be set on self.file_fields dictionary.")
