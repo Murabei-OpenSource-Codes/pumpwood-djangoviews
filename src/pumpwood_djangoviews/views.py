@@ -532,15 +532,14 @@ class PumpWoodRestService(viewsets.ViewSet):
             raise exceptions.PumpWoodForbidden(
                 "storage_object not set")
 
-        file_field = request.query_params.get('file_field', None)
+        file_field = request.query_params.get('file-field', None)
         if file_field not in self.file_fields.keys():
             msg = (
-                "'{field}' must be set on file_fields dictionary."
-            ).format(field=file_field)
+                "file-field[{file_field}] must be set on file_fields "
+                "dictionary")
             raise exceptions.PumpWoodForbidden(
                 msg, payload={
-                    'field': file_field,
-                    file_field: 'not_found'})
+                    'file_field': file_field})
 
         obj = self.service_model.objects.get(id=pk)
         file_path = getattr(obj, file_field)
@@ -549,7 +548,8 @@ class PumpWoodRestService(viewsets.ViewSet):
 
         if not file_path:
             raise exceptions.PumpWoodObjectDoesNotExist(
-                "field [{}] is not set at object".format(file_field))
+                "file-field[{file_field}] is not set at object",
+                payload={"file_field": file_field})
         file_data = self.storage_object.read_file(file_path)
         file_name = os.path.basename(file_path)
 
@@ -660,16 +660,19 @@ class PumpWoodRestService(viewsets.ViewSet):
                 'field [{}] not found at object'. Indicates that file was not
                 found on storage.
         """
-        file_field = request.query_params.get('file_field', None)
+        file_field = request.query_params.get('file-field', None)
         if file_field not in self.file_fields.keys():
+            msg = (
+                "file-field[file_field] must be set on " +
+                "self.file_fields dictionary.")
             raise exceptions.PumpWoodForbidden(
-                "file_field must be set on self.file_fields dictionary.")
+                message=msg, payload={"file_field": file_field})
         obj = self.service_model.objects.get(id=pk)
 
         is_file_field = hasattr(obj, file_field)
         if not is_file_field:
             msg = (
-                "file_field[{file_field}] is not an attribute of the object")
+                "file-field[{file_field}] is not an attribute of the object")
             raise exceptions.PumpWoodObjectDoesNotExist(
                 message=msg, payload={"file_field": file_field})
 
