@@ -661,7 +661,6 @@ class PumpWoodRestService(viewsets.ViewSet):
                 found on storage.
         """
         file_field = request.query_params.get('file_field', None)
-        print("file_field:", file_field)
         if file_field not in self.file_fields.keys():
             raise exceptions.PumpWoodForbidden(
                 "file_field must be set on self.file_fields dictionary.")
