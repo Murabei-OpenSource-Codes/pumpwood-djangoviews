@@ -666,12 +666,21 @@ class PumpWoodRestService(viewsets.ViewSet):
                 "file_field must be set on self.file_fields dictionary.")
         obj = self.service_model.objects.get(id=pk)
 
-        file = getattr(obj, file_field)
-        if file is None:
+        is_file_field = hasattr(obj, file_field)
+        if not is_file_field:
+            msg = (
+                "file_field[{file_field}] is not an attribute of the object")
             raise exceptions.PumpWoodObjectDoesNotExist(
-                "field [{}] not found at object".format(file_field))
-        else:
-            file_path = file.name
+                message=msg, payload={"file_field": file_field})
+
+        file = getattr(obj, file_field)
+        if file is None or file == "":
+            msg = (
+                "file[{file_field}] is not set on object")
+            raise exceptions.PumpWoodObjectDoesNotExist(
+                message=msg, payload={"file_field": file_field})
+
+        file_path = file.name
         setattr(obj, file_field, None)
         obj.save()
 
