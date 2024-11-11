@@ -7,7 +7,7 @@ consumed by the client side.
 """
 import os
 from slugify import slugify
-from django.conf.urls import url
+from django.urls import path
 from rest_framework.routers import BaseRouter
 from django.core.exceptions import ImproperlyConfigured
 from pumpwood_djangoviews.views import (
@@ -129,109 +129,120 @@ class PumpWoodRouter(BaseRouter):
         ##############
         # Setting urls
         # List
-        url_list = '^rest/{basename}/list/$'
+        url_list = 'rest/{basename}/list/'
         resp_list.append(
-            url(url_list.format(basename=basename),
+            path(
+                url_list.format(basename=basename),
                 viewset.as_view({'post': 'list'}),
                 name='rest__{basename}__list'.format(basename=basename)))
 
         # List without paginaiton
-        url_list_witout_pag = '^rest/{basename}/list-without-pag/$'
+        url_list_witout_pag = 'rest/{basename}/list-without-pag/'
         resp_list.append(
-            url(url_list_witout_pag.format(basename=basename),
+            path(
+                url_list_witout_pag.format(basename=basename),
                 viewset.as_view({'post': 'list_without_pag'}),
                 name='rest__{basename}__list_without_pag'.format(
-                    basename=basename)))
+                     basename=basename)))
 
         # retrieve
-        url_retrieve = '^rest/{basename}/retrieve/(?P<pk>\d+)/$'
+        url_retrieve = 'rest/{basename}/retrieve/<int:pk>/'
         resp_list.append(
-            url(url_retrieve.format(basename=basename),
+            path(
+                url_retrieve.format(basename=basename),
                 viewset.as_view({'get': 'retrieve', 'delete': 'delete'}),
                 name='rest__{basename}__retrieve'.format(basename=basename)))
 
         # retrieve file
-        url_retrieve = '^rest/{basename}/retrieve-file/(?P<pk>\d+)/$'
+        url_retrieve = 'rest/{basename}/retrieve-file/<int:pk>/'
         resp_list.append(
-            url(url_retrieve.format(basename=basename),
-                viewset.as_view({'get': 'retrieve_file'}),
-                name='rest__{basename}__retrieve_file'.format(
+            path(url_retrieve.format(basename=basename),
+                 viewset.as_view({'get': 'retrieve_file'}),
+                 name='rest__{basename}__retrieve_file'.format(
                     basename=basename)))
 
         # retrieve file
-        url_retrieve = '^rest/{basename}/remove-file-field/(?P<pk>\d+)/$'
+        url_retrieve = 'rest/{basename}/remove-file-field/<int:pk>/'
         resp_list.append(
-            url(url_retrieve.format(basename=basename),
+            path(
+                url_retrieve.format(basename=basename),
                 viewset.as_view({'delete': 'remove_file_field'}),
                 name='rest__{basename}__remove_file_field'.format(
                     basename=basename)))
 
         # delete
-        url_delete = '^rest/{basename}/delete/(?P<pk>\d+)/$'
+        url_delete = 'rest/{basename}/delete/<int:pk>/'
         resp_list.append(
-            url(url_delete.format(basename=basename),
+            path(
+                url_delete.format(basename=basename),
                 viewset.as_view({'delete': 'delete'}),
                 name='rest__{basename}__delete'.format(basename=basename)))
 
-        url_delete = '^rest/{basename}/delete/$'
+        url_delete = 'rest/{basename}/delete/'
         resp_list.append(
-            url(url_delete.format(basename=basename),
+            path(
+                url_delete.format(basename=basename),
                 viewset.as_view({'post': 'delete_many'}),
                 name='rest__{basename}__delete_many'.format(
                     basename=basename)))
         # save
-        url_save = '^rest/{basename}/save/$'
+        url_save = 'rest/{basename}/save/'
         resp_list.append(
-            url(url_save.format(basename=basename),
+            path(
+                url_save.format(basename=basename),
                 viewset.as_view({'post': 'save', 'put': 'save'}),
                 name='rest__{basename}__save'.format(basename=basename)))
 
         # actions list
-        url_actions_list = '^rest/{basename}/actions/$'
+        url_actions_list = 'rest/{basename}/actions/'
         resp_list.append(
-            url(url_actions_list.format(basename=basename),
+            path(
+                url_actions_list.format(basename=basename),
                 viewset.as_view({'get': 'list_actions'}),
                 name='rest__{basename}__actions_list'.format(
                     basename=basename)))
 
         # actions run with object
         url_act_obj = (
-            '^rest/{basename}/actions/(?P<action_name>\w+)/(?P<pk>\d+)/$')
+            'rest/{basename}/actions/<str:action_name>/<int:pk>/')
         resp_list.append(
-            url(
+            path(
                 url_act_obj.format(basename=basename), viewset.as_view({
                     'post': 'execute_action'}),
                 name='rest__{basename}__actions_run'.format(
                     basename=basename)))
 
         # actions run with object
-        url_act_static = '^rest/{basename}/actions/(?P<action_name>\w+)/$'
+        url_act_static = 'rest/{basename}/actions/<str:action_name>/'
         resp_list.append(
-            url(
+            path(
                 url_act_static.format(basename=basename), viewset.as_view(
                     {'post': 'execute_action'}),
                 name='rest__{basename}__actions_run'.format(
                     basename=basename)))
 
         # options
-        url_options = '^rest/{basename}/options/$'
+        url_options = 'rest/{basename}/options/'
         resp_list.append(
-            url(url_options.format(basename=basename),
+            path(
+                url_options.format(basename=basename),
                 viewset.as_view({
                     'get': 'search_options', 'post': 'fill_options'}),
                 name='rest__{basename}__options'.format(basename=basename)))
 
-        url_options = '^rest/{basename}/list-options/$'
+        url_options = 'rest/{basename}/list-options/'
         resp_list.append(
-            url(url_options.format(basename=basename),
+            path(
+                url_options.format(basename=basename),
                 viewset.as_view({
                     'get': 'list_view_options'}),
                 name='rest__{basename}__list_options'.format(
                     basename=basename)))
 
-        url_options = '^rest/{basename}/retrieve-options/$'
+        url_options = 'rest/{basename}/retrieve-options/'
         resp_list.append(
-            url(url_options.format(basename=basename),
+            path(
+                url_options.format(basename=basename),
                 viewset.as_view({
                     'get': 'retrieve_view_options',
                     'post': 'fill_options_validation'}),
@@ -272,13 +283,17 @@ class PumpWoodDataBaseRouter(PumpWoodRouter):
         resp_list = super(PumpWoodDataBaseRouter, self).get_registry_pattern(
             viewset, basename)
 
+        path_template = 'rest/{basename}/pivot/'
         resp_list.append(
-            url('^rest/{basename}/pivot/$'.format(basename=basename),
+            path(
+                path_template.format(basename=basename),
                 viewset.as_view({'post': 'pivot'}),
                 name='rest__{basename}__pivot'.format(basename=basename)))
 
+        path_template = 'rest/{basename}/bulk-save/'
         resp_list.append(
-            url('^rest/{basename}/bulk-save/$'.format(basename=basename),
+            path(
+                path_template.format(basename=basename),
                 viewset.as_view({'post': 'bulk_save'}),
                 name='rest__{basename}__bulk_save'.format(basename=basename)))
         return resp_list

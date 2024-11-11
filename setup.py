@@ -11,7 +11,7 @@ os.chdir(os.path.normpath(os.path.join(os.path.abspath(__file__), os.pardir)))
 
 setuptools.setup(
     name='pumpwood-djangoviews',
-    version='0.45.11',
+    version='0.45.12',
     include_package_data=True,
     license='BSD-3-Clause License',
     description='Assist creating views for Django using Pumpwood pattern.',
@@ -29,8 +29,8 @@ setuptools.setup(
         'requests',
         'simplejson',
         'pandas',
-        'djangorestframework<3.13',
-        'Django<4.0.0',
+        'djangorestframework>=3.13',
+        'Django>=5.0.0',
         'Shapely>=1.7.0',
         'geopandas>=0.8.1',
         'pumpwood-i8n>=0.1',
