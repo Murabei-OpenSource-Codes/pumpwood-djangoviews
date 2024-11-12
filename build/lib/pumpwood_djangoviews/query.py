@@ -1,6 +1,5 @@
 """Functions to run query at django using Pumpwood Rest API."""
-from django.db.models.functions import Cast
-from django.db.models import F, TextField
+from django.db.models import Q
 
 
 def filter_by_dict(query_set, filter_dict={}, exclude_dict={}, order_by=[]):
@@ -25,26 +24,43 @@ def filter_by_dict(query_set, filter_dict={}, exclude_dict={}, order_by=[]):
     Returns:
         Filtered query set.
     """
-    for key in list(filter_dict.keys()):
+    q_arg = None
+    for key, value in filter_dict.items():
         # Check if JSON fields are being fetched and change key to django
         # sintaxe
+        kwargs = {}
         if "->" in key:
-            value = filter_dict.pop(key)
             key = key.replace("->", "__")
-            filter_dict[key] = value
+        kwargs[key] = value
 
-    for key in list(exclude_dict.keys()):
+        temp_q_arg = Q(**kwargs)
+        if q_arg is not None:
+            q_arg = q_arg & temp_q_arg
+        else:
+            q_arg = temp_q_arg
+
+    for key, value in exclude_dict.items():
         # Check if JSON fields are being fetched and change key to django
         # sintaxe
+        kwargs = {}
         if "->" in key:
-            value = exclude_dict.pop(key)
             key = key.replace("->", "__")
-            exclude_dict[key] = value
+        kwargs[key] = value
+
+        # For exclude arguents set as NOT true at filter
+        temp_q_arg = ~Q(**kwargs)
+        if q_arg is not None:
+            q_arg = q_arg & temp_q_arg
+        else:
+            q_arg = temp_q_arg
 
     # Check if JSON fields are being fetched and change key to django
     # sintaxe
     order_by = [o.replace("->", "__") for o in order_by]
+    print("\n---------")
+    print("filter_dict:", filter_dict)
+    print("exclude_dict:", exclude_dict)
+    print("order_by:", order_by)
     return query_set\
-        .filter(**filter_dict)\
-        .exclude(**exclude_dict)\
+        .filter(q_arg)\
         .order_by(*order_by)
