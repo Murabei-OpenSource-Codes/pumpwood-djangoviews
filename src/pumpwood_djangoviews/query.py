@@ -57,10 +57,10 @@ def filter_by_dict(query_set, filter_dict={}, exclude_dict={}, order_by=[]):
     # Check if JSON fields are being fetched and change key to django
     # sintaxe
     order_by = [o.replace("->", "__") for o in order_by]
-    print("\n---------")
-    print("filter_dict:", filter_dict)
-    print("exclude_dict:", exclude_dict)
-    print("order_by:", order_by)
-    return query_set\
-        .filter(q_arg)\
-        .order_by(*order_by)
+    if q_arg is None:
+        return query_set\
+            .order_by(*order_by)
+    else:
+        return query_set\
+            .filter(q_arg)\
+            .order_by(*order_by)
