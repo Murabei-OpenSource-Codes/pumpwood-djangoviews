@@ -15,8 +15,7 @@ from pumpwood_djangoviews.views import (
 
 
 class PumpWoodRouter(BaseRouter):
-    """
-    Define a Router for PumpWoodRestService views.
+    """Define a Router for PumpWoodRestService views.
 
     Router are used to define default end-points for Pumpwood for each
     model_class.
@@ -24,6 +23,7 @@ class PumpWoodRouter(BaseRouter):
     Raises:
         ImproperlyConfigured:
             If a view different from PumpWoodRestService is used.
+
     Example:
         Example of url.py file at Pumpwood Auth package.
         ```python
@@ -46,14 +46,15 @@ class PumpWoodRouter(BaseRouter):
     """
 
     def get_default_base_name(self, viewset):
+        """Get model class name to create end-points."""
         return viewset.service_model.__name__
 
     def register(self, viewset):
-        """
-        Register view urls using the name of the models as path.
+        """Register view urls using the name of the models as path.
 
         Args:
             viewset: A view set from rest framework.
+
         Raises:
             ImproperlyConfigured:
                 If view is not a PumpWoodRestService for PumpWoodRouter and
@@ -65,12 +66,12 @@ class PumpWoodRouter(BaseRouter):
         self.registry.append((viewset, base_name))
 
     def validate_view(self, viewset):
-        """
-        Validate if view is of correct type.
+        """Validate if view is of correct type.
 
         Args:
             viewset: Rest framework view set, it must have inherited from
             PumpWoodRestService.
+
         Raises:
             ImproperlyConfigured:
                 If view is not a PumpWoodRestService.
@@ -81,8 +82,7 @@ class PumpWoodRouter(BaseRouter):
                 "PumpWoodRestService")
 
     def get_registry_pattern(self, viewset, basename):
-        """
-        Register patterns for pumpwood end-points.
+        """Register patterns for pumpwood end-points.
 
         Base name is set acording to Model name (model_class).
 
@@ -116,6 +116,8 @@ class PumpWoodRouter(BaseRouter):
         - `[GET,POST] rest/{basename}/retrieve-options/`: GET Return
             information that can be used to render retrieve pages. POST will
             validate parcial object information.
+        - `[POST] rest/{basename}/aggregate/`: Return results for aggregation
+            operation (group by).
 
         Returns:
             Return a list of URLs associated with model_class with Pumpwood
@@ -127,7 +129,7 @@ class PumpWoodRouter(BaseRouter):
 
         resp_list = []
         ##############
-        # Setting urls
+        # Setting URLs
         # List
         url_list = 'rest/{basename}/list/'
         resp_list.append(
@@ -136,7 +138,7 @@ class PumpWoodRouter(BaseRouter):
                 viewset.as_view({'post': 'list'}),
                 name='rest__{basename}__list'.format(basename=basename)))
 
-        # List without paginaiton
+        # List without pagination
         url_list_witout_pag = 'rest/{basename}/list-without-pag/'
         resp_list.append(
             path(
@@ -249,7 +251,16 @@ class PumpWoodRouter(BaseRouter):
                 name='rest__{basename}__retrieve_options'.format(
                     basename=basename)))
 
-        ##############
+        url_options = 'rest/{basename}/aggregate/'
+        resp_list.append(
+            path(
+                url_options.format(basename=basename),
+                viewset.as_view({
+                    'post': 'aggregate'}),
+                name='rest__{basename}aggregate'.format(
+                    basename=basename)))
+
+        # Return all end-points mapped
         return resp_list
 
     def get_urls(self):
