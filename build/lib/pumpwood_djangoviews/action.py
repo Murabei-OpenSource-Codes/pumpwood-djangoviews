@@ -67,7 +67,7 @@ import textwrap
 import pandas as pd
 import typing
 from datetime import date, datetime
-from typing import cast, Callable, Dict, List, Optional, cast
+from typing import cast, Callable
 from pumpwood_communication.exceptions import PumpWoodActionArgsException
 
 
@@ -96,17 +96,16 @@ class Action:
 
     def __init__(self, func: Callable, info: str,
                  auth_header: str = None) -> Callable:
-        """
-        __init__.
+        """__init__.
 
         Args:
-            func [Callable]:
+            func (Callable):
                 Function that will be decorated with @action Pumpwood
                 decorator.
-            info [str]:
+            info (str):
                 Function information that will be returned at [GET] `actions`
                 to user.
-            auth_header [str]:
+            auth_header (str):
                 Function argument that will be populated with `auth_header`
                 when executing the function.
         """
@@ -128,7 +127,7 @@ class Action:
                 resp["in"] = [
                     {"value": x, "description": x}
                     for x in typing_args]
-            elif typing.get_origin(param.annotation) == list:
+            elif typing.get_origin(param.annotation) is list:
                 resp["many"] = True
                 list_args = typing.get_args(param.annotation)
                 if len(list_args) == 0:
@@ -155,7 +154,7 @@ class Action:
                 resp["in"] = [
                     {"value": x, "description": x}
                     for x in typing_args]
-            elif typing.get_origin(return_annotation) == list:
+            elif typing.get_origin(return_annotation) is list:
                 resp["many"] = True
                 list_args = typing.get_args(return_annotation)
                 if len(list_args) == 0:
@@ -202,8 +201,7 @@ class Action:
         self.auth_header = auth_header
 
     def to_dict(self) -> dict:
-        """
-        Return dict representation of the action.
+        """Return dict representation of the action.
 
         Returns:
             Return a dictonary used to serialize action to action end-point.
@@ -229,19 +227,20 @@ class Action:
 
 
 def action(info: str = "", auth_header: str = None):
-    """
-    Define decorator that will convert the function into a rest action.
+    """Define decorator that will convert the function into a rest action.
 
     Args:
-        info [str]:
+        info (str):
             Just an information about the decorated function that will be
             returned in GET /rest/<model_class>/actions/.
-        auth_header [str]:
+        auth_header (str):
             Variable that will receive the auth_header, this can be used
             at the function to impersonation of the user to call other
             microservices.
+
     Returns:
         Return decorated function.
+
     Example:
     ```python
     from pumpwood_djangoviews.action import action
@@ -280,18 +279,18 @@ def action(info: str = "", auth_header: str = None):
 
 
 def load_action_parameters(func: Callable, parameters: dict, request) -> dict:
-    """
-    Cast arguments to its original types.
+    """Cast arguments to its original types.
 
     Args:
-        func [Callable]:
+        func (Callable):
             Function that parameters will be casted according to function
             arguments tips.
-        parameters [dict]:
+        parameters (dict):
             Parameters received at execute action end-point, they will be
             casted according to funciton tips.
         request:
             Django request.
+
     Returns:
         Return parameters casted according to tips at function arguments.
     """

@@ -1508,13 +1508,24 @@ class PumpWoodRestService(viewsets.ViewSet):
             order_by = request_data.pop('order_by', [])
             arg_dict.update(request_data)
             query_set = filter_by_dict(**arg_dict)
+            limit = request_data.get('limit')
 
             # Generate aggregation results
             group_by = request_data.get('group_by', [])
             agg = request_data.get('agg', {})
-            aggregate_results = pd.DataFrame(aggregate_by_dict(
-                query_set=query_set, group_by=group_by,
-                agg=agg, order_by=order_by))
+
+            # If limit is passed to query, limit the results
+            aggregate_query = None
+            if limit is None:
+                aggregate_query = aggregate_by_dict(
+                    query_set=query_set, group_by=group_by,
+                    agg=agg, order_by=order_by)
+            else:
+                aggregate_query = aggregate_by_dict(
+                    query_set=query_set, group_by=group_by,
+                    agg=agg, order_by=order_by)[:limit]
+
+            aggregate_results = pd.DataFrame(aggregate_query)
             return Response(aggregate_results.to_dict(format_return))
 
         except TypeError as e:
