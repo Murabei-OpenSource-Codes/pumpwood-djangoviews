@@ -275,7 +275,7 @@ class PumpWoodRestService(viewsets.ViewSet):
                 ).format(filename=filename, extension=extension,
                          allowed_extensions=str(allowed_extensions))]
         return []
-    
+
     def base_query(self, request, **kwargs):
         """Definition of an access filter to limit viewing of objects.
 
@@ -283,13 +283,17 @@ class PumpWoodRestService(viewsets.ViewSet):
             As the queries on the service_model relies on this method,
             the query returned by this method will modify any other query on
             this view.
-        
+
         Args:
-            request: Django request object.
+            request:
+                Django request object.
+            **kwargs:
+                Help when inheriting class.
 
         Returns:
-            Return the result of the query **without** pagination . Objects
-            are serialized using `serializer` attribute.
+            Returns a Django ORM query filtering the results according to
+            user permitions if implemented. This function is used on retrieve
+            and list end-points, limiting user access.
         """
         return self.service_model.objects.all()
 
