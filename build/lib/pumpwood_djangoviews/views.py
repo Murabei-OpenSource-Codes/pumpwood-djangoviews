@@ -276,6 +276,27 @@ class PumpWoodRestService(viewsets.ViewSet):
                          allowed_extensions=str(allowed_extensions))]
         return []
 
+    def base_query(self, request, **kwargs):
+        """Definition of an access filter to limit viewing of objects.
+
+        ..: notes:
+            As the queries on the service_model relies on this method,
+            the query returned by this method will modify any other query on
+            this view.
+
+        Args:
+            request:
+                Django request object.
+            **kwargs:
+                Help when inheriting class.
+
+        Returns:
+            Returns a Django ORM query filtering the results according to
+            user permitions if implemented. This function is used on retrieve
+            and list end-points, limiting user access.
+        """
+        return self.service_model.objects.all()
+
     def list(self, request) -> List[dict]:
         """View function to list objects with pagination.
 
@@ -351,7 +372,7 @@ class PumpWoodRestService(viewsets.ViewSet):
                     exclude_dict["deleted"] = True
             ################################################################
 
-            arg_dict = {'query_set': self.service_model.objects.all()}
+            arg_dict = {'query_set': self.base_query(request=request)}
             arg_dict.update(request_data)
             query_set = filter_by_dict(**arg_dict)[:list_paginate_limit]
 
@@ -429,7 +450,7 @@ class PumpWoodRestService(viewsets.ViewSet):
                     exclude_dict["deleted"] = True
             ################################################################
 
-            arg_dict = {'query_set': self.service_model.objects.all()}
+            arg_dict = {'query_set': self.base_query(request=request)}
             arg_dict.update(request_data)
 
             query_set = filter_by_dict(**arg_dict)
@@ -483,7 +504,7 @@ class PumpWoodRestService(viewsets.ViewSet):
             request.query_params.get('default_fields', 'false'))
         ##########################
 
-        obj = self.service_model.objects.get(pk=pk)
+        obj = self.base_query(request=request).get(pk=pk)
         response_data = self.serializer(
             obj, many=False, fields=fields,
             foreign_key_fields=foreign_key_fields,
@@ -542,7 +563,7 @@ class PumpWoodRestService(viewsets.ViewSet):
                 msg, payload={
                     'file_field': file_field})
 
-        obj = self.service_model.objects.get(id=pk)
+        obj = self.base_query(request=request).get(id=pk)
         file_path = getattr(obj, file_field)
         if isinstance(file_path, FieldFile):
             file_path = file_path.name
@@ -585,7 +606,7 @@ class PumpWoodRestService(viewsets.ViewSet):
         Returns:
             Return the object that was removed.
         """
-        obj = self.service_model.objects.get(pk=pk)
+        obj = self.base_query(request=request).get(pk=pk)
         force_delete = json.loads(request.query_params.get(
             'force_delete', 'false'))
         return_data = self.serializer(obj, many=False).data
@@ -630,7 +651,7 @@ class PumpWoodRestService(viewsets.ViewSet):
                 If any error raised when performing request.
         """
         try:
-            arg_dict = {'query_set': self.service_model.objects.all()}
+            arg_dict = {'query_set': self.base_query(request=request)}
             arg_dict.update(request.data)
 
             query_set = filter_by_dict(**arg_dict)
@@ -675,7 +696,7 @@ class PumpWoodRestService(viewsets.ViewSet):
                 "self.file_fields dictionary.")
             raise exceptions.PumpWoodForbidden(
                 message=msg, payload={"file_field": file_field})
-        obj = self.service_model.objects.get(id=pk)
+        obj = self.base_query(request=request).get(id=pk)
 
         is_file_field = hasattr(obj, file_field)
         if not is_file_field:
@@ -746,7 +767,7 @@ class PumpWoodRestService(viewsets.ViewSet):
 
         # update
         if data_pk:
-            data_to_update = self.service_model.objects.get(pk=data_pk)
+            data_to_update = self.base_query(request=request).get(pk=data_pk)
             serializer = self.serializer(
                 data_to_update, data=request_data,
                 context={'request': request})
@@ -990,7 +1011,7 @@ class PumpWoodRestService(viewsets.ViewSet):
         object_dict = None
         action = None
         if pk is not None:
-            model_object = self.service_model.objects.filter(pk=pk).first()
+            model_object = self.base_query(request=request).filter(pk=pk).first()
             if model_object is None:
                 message_template = (
                     "Requested object {service_model}[{pk}] not found.")
@@ -1502,7 +1523,7 @@ class PumpWoodRestService(viewsets.ViewSet):
                     exclude_dict["deleted"] = True
 
             arg_dict = {
-                'query_set': self.service_model.objects.all()}
+                'query_set': self.base_query(request=request)}
 
             # Separate order_by list to be applied after the aggregation
             order_by = request_data.pop('order_by', [])
@@ -1638,7 +1659,7 @@ class PumpWoodDataBaseRestService(PumpWoodRestService):
             model_variables = ['id'] + model_variables
 
         # Limit pivot results if limit parameter is set
-        query_set = self.service_model.objects.all()
+        query_set = self.base_query(request=request)
         if limit is not None:
             query_set = query_set[:int(limit)]
 
