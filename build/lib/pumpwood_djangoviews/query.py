@@ -109,7 +109,7 @@ def aggregate_by_dict(query_set, group_by: List[str], agg: Dict,
         that were set on group_by list and keys of the agg as columns with
         the results of the aggregations.
     """
-    DICT_ORM = { # NOQA
+    DICT_ORM = {
         'sum': Sum, 'mean': Avg, 'count': Count, 'min': Min, 'max': Max,
         'std': StdDev, 'var': Variance}
 
@@ -142,8 +142,12 @@ def aggregate_by_dict(query_set, group_by: List[str], agg: Dict,
     # Apply group_by fields using values, aggregate them according to
     # annotate parameters and after that order the results (including
     # aggregation fields)
-    return_query_set = query_set\
-        .values(*group_by)\
-        .annotate(**annotate_args)\
-        .order_by(*order_by)
-    return return_query_set
+    if len(group_by) != 0:
+        return query_set\
+            .values(*group_by)\
+            .annotate(**annotate_args)\
+            .order_by(*order_by)
+    else:
+        # Aggregate result is a dictonary, to keep pattern it will be returned
+        # as a list with one entry
+        return [query_set.aggregate(**annotate_args)]
