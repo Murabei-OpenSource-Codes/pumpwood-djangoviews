@@ -1524,6 +1524,8 @@ class PumpWoodRestService(viewsets.ViewSet):
 
             arg_dict = {
                 'query_set': self.base_query(request=request)}
+            arg_dict = {
+                'query_set': self.service_model.objects.all()}
 
             # Separate order_by list to be applied after the aggregation
             order_by = request_data.pop('order_by', [])
