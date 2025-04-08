@@ -1011,7 +1011,8 @@ class PumpWoodRestService(viewsets.ViewSet):
         object_dict = None
         action = None
         if pk is not None:
-            model_object = self.base_query(request=request).filter(pk=pk).first()
+            model_object = self.base_query(request=request)\
+                .filter(pk=pk).first()
             if model_object is None:
                 message_template = (
                     "Requested object {service_model}[{pk}] not found.")
