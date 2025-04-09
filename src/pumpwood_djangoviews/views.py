@@ -1622,7 +1622,7 @@ class PumpWoodDataBaseRestService(PumpWoodRestService):
                  to pivot dataframe.'. Indicates that value column is not
                  avaiable query results, so it not possible to pivot data.
         """
-        if self.model_variables is None:
+        if len(self.model_variables) == 0:
             msg = "Pivot is not avaiable, set model_variables at view"
             raise exceptions.PumpWoodForbidden(msg)
 
