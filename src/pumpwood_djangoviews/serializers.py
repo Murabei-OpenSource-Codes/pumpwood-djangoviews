@@ -4,6 +4,7 @@ import importlib
 from typing import List, Union
 from rest_framework import serializers
 from pumpwood_communication.microservices import PumpWoodMicroService
+from pumpwood_communication import exceptions
 
 
 def _import_function_by_string(module_function_string):
@@ -165,6 +166,70 @@ class MicroserviceForeignKeyField(serializers.Field):
         """@private."""
         return obj
 
+    def _microservice_retrieve(self, object_pk: Union[int, str],
+                               fields: List[str]) -> dict:
+        """Retrieve data using microservice and cache results.
+
+        Retrieve data using list one at the destination model_class, it
+        will cache de results on request object to reduce processing time.
+
+        Args:
+            object_pk (Union[int, str]):
+                Object primary key to retrieve information using
+                microservice.
+            fields (List[str]):
+                Limit the fields that will be returned using microservice.
+        """
+        serializer = self.parent
+        request = serializer.context.get('request')
+        print("serializer.context:", serializer.context)
+
+        # Fetch data retrieved from microservice in same request, this
+        # is usefull specially when using list end-points with forenging kes
+        key_string = ("m[{model_class}]__pk[{pk}]__fields[{fields}]")\
+            .format(
+                model_class=self.model_class, pk=object_pk,
+                fields=fields)
+        input_string_hash = hash(key_string)
+        cache_dict = getattr(request, '_cache_microservice_fk_field', {})
+        cached_data = cache_dict.get(input_string_hash)
+        if cached_data is not None:
+            return cached_data
+
+        # If values where not cached on request, fetch information using
+        # microservice
+        try:
+            object_data = self.microservice.list_one(
+                model_class=self.model_class, pk=object_pk,
+                fields=self.fields)
+        except exceptions.PumpWoodObjectDoesNotExist:
+            return {
+                "model_class": self.model_class,
+                "__error__": 'PumpWoodObjectDoesNotExist'}
+
+        if self.display_field is not None:
+            if self.display_field not in object_data.keys():
+                msg = (
+                    "Serializer not correctly configured, it is not possible "
+                    "to find display_field[{display_field}] at the object "
+                    "of foreign_key[{foreign_key}] liked to "
+                    "model_class[{model_class}]").format(
+                        display_field=self.display_field,
+                        foreign_key=self.name, model_class=self.model_class)
+                raise exceptions.PumpWoodOtherException(
+                    msg, payload={
+                        "display_field": self.display_field,
+                        "foreign_key": self.name,
+                        "model_class": self.model_class})
+            object_data['__display_field__'] = object_data[self.display_field]
+        else:
+            object_data['__display_field__'] = None
+
+        # Cache data to reduce future microservice calls on same request
+        cache_dict[input_string_hash] = object_data
+        request._cache_microservice_fk_field = cache_dict
+        return object_data
+
     def to_representation(self, obj) -> dict:
         """Use microservice to get object at serialization.
 
@@ -182,11 +247,8 @@ class MicroserviceForeignKeyField(serializers.Field):
         if object_pk is None:
             return {"model_class": self.model_class}
 
-        object_data = self.microservice.retrieve(
-            model_class=self.model_class, pk=object_pk,
-            default_fields=True, fields=self.fields)
-        object_data['__display_field__'] = object_data.get(self.display_field)
-        return object_data
+        return self._microservice_retrieve(
+            object_pk=object_pk, fields=self.fields)
 
     def to_internal_value(self, data):
         """Raise error always, does not unserialize objects of this field.

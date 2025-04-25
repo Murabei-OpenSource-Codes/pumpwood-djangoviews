@@ -379,7 +379,8 @@ class PumpWoodRestService(viewsets.ViewSet):
             return Response(self.serializer(
                 query_set, many=True, fields=fields,
                 foreign_key_fields=foreign_key_fields,
-                default_fields=default_fields).data)
+                default_fields=default_fields,
+                context={'request': request}).data)
         except Exception as e:
             raise exceptions.PumpWoodQueryException(message=str(e))
 
@@ -457,7 +458,8 @@ class PumpWoodRestService(viewsets.ViewSet):
             return Response(self.serializer(
                 query_set, many=True, fields=fields,
                 default_fields=default_fields,
-                foreign_key_fields=foreign_key_fields).data)
+                foreign_key_fields=foreign_key_fields,
+                context={'request': request}).data)
 
         except TypeError as e:
             raise exceptions.PumpWoodQueryException(
@@ -509,7 +511,8 @@ class PumpWoodRestService(viewsets.ViewSet):
             obj, many=False, fields=fields,
             foreign_key_fields=foreign_key_fields,
             related_fields=related_fields,
-            default_fields=default_fields).data
+            default_fields=default_fields,
+            context={'request': request}).data
         return Response(response_data)
 
     def retrieve_file(self, request, pk: int) -> bytes:
@@ -609,7 +612,8 @@ class PumpWoodRestService(viewsets.ViewSet):
         obj = self.base_query(request=request).get(pk=pk)
         force_delete = json.loads(request.query_params.get(
             'force_delete', 'false'))
-        return_data = self.serializer(obj, many=False).data
+        return_data = self.serializer(
+            obj, many=False, context={'request': request}).data
 
         # If object has deleted field, set it to True if force_delete
         # parameter is not set, this will function for objects that
@@ -769,14 +773,12 @@ class PumpWoodRestService(viewsets.ViewSet):
         if data_pk:
             data_to_update = self.base_query(request=request).get(pk=data_pk)
             serializer = self.serializer(
-                data_to_update, data=request_data,
-                context={'request': request})
+                data_to_update, data=request_data)
             saved_obj = save_serializer_instance(serializer)
             response_status = status.HTTP_200_OK
         # save
         else:
-            serializer = self.serializer(
-                data=request_data, context={'request': request})
+            serializer = self.serializer(data=request_data)
             saved_obj = save_serializer_instance(serializer)
             response_status = status.HTTP_201_CREATED
 
@@ -843,7 +845,8 @@ class PumpWoodRestService(viewsets.ViewSet):
 
         # Overhead, serializando e deserializando o objecto
         return Response(
-            self.serializer(saved_obj).data, status=response_status)
+            self.serializer(saved_obj, context={'request': request}).data,
+            status=response_status)
 
     def _get_actions(self):
         """Get all actions with action decorator.
@@ -1025,7 +1028,8 @@ class PumpWoodRestService(viewsets.ViewSet):
                         "service_model": temp_service_model, "pk": pk})
 
             action = getattr(model_object, action_name)
-            object_dict = self.serializer(model_object, many=False).data
+            object_dict = self.serializer(
+                model_object, many=False, context={'request': request}).data
         else:
             action = getattr(self.service_model, action_name)
 
