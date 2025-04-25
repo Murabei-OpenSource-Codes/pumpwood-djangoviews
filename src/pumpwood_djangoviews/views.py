@@ -773,12 +773,14 @@ class PumpWoodRestService(viewsets.ViewSet):
         if data_pk:
             data_to_update = self.base_query(request=request).get(pk=data_pk)
             serializer = self.serializer(
-                data_to_update, data=request_data)
+                data_to_update, data=request_data,
+                context={'request': request})
             saved_obj = save_serializer_instance(serializer)
             response_status = status.HTTP_200_OK
         # save
         else:
-            serializer = self.serializer(data=request_data)
+            serializer = self.serializer(
+                data=request_data, context={'request': request})
             saved_obj = save_serializer_instance(serializer)
             response_status = status.HTTP_201_CREATED
 
