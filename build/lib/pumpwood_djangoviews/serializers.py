@@ -4,6 +4,7 @@ import importlib
 from typing import List, Union
 from rest_framework import serializers
 from pumpwood_communication.microservices import PumpWoodMicroService
+from pumpwood_communication import exceptions
 
 
 def _import_function_by_string(module_function_string):
@@ -18,8 +19,7 @@ def _import_function_by_string(module_function_string):
 
 
 class ClassNameField(serializers.Field):
-    """
-    Serializer Field that returns model name.
+    """Serializer Field that returns model name.
 
     It is used as default at Pumpwood to `model_class` always returning
     model_class with objects.
@@ -36,16 +36,14 @@ class ClassNameField(serializers.Field):
         super(ClassNameField, self).__init__(**kwargs)
 
     def get_attribute(self, obj):
-        """
-        Pass the object instance onto `to_representation`.
+        """Pass the object instance onto `to_representation`.
 
         @private
         """
         return obj
 
     def to_representation(self, obj):
-        """
-        Serialize the object's class name.
+        """Serialize the object's class name.
 
         ENDPOINT_SUFFIX enviroment variable is DEPRECTED.
         @private
@@ -54,8 +52,7 @@ class ClassNameField(serializers.Field):
         return suffix + obj.__class__.__name__
 
     def to_internal_value(self, data):
-        """
-        Make no treatment of the income data.
+        """Make no treatment of the income data.
 
         @private
         """
@@ -65,8 +62,7 @@ class ClassNameField(serializers.Field):
 ####################################
 # Microservice related serializers #
 class MicroserviceForeignKeyField(serializers.Field):
-    """
-    Serializer field for ForeignKey using microservice.
+    """Serializer field for ForeignKey using microservice.
 
     This serializer will fetch object data from a microservice using a
     microservice object.
@@ -107,26 +103,29 @@ class MicroserviceForeignKeyField(serializers.Field):
     """List of the field that will be returned with foreign key object."""
 
     def __init__(self, source: str, microservice: PumpWoodMicroService,
-                 model_class: str,  display_field: str = None,
+                 model_class: str, display_field: str = None,
                  fields: List[str] = None, **kwargs):
-        """
-        __init__.
+        """__init__.
 
         Args:
-            source [str]:
+            source (str):
                 Source attribute that contains id value associated with
                 a foreign key.
-            microservice [PumpWoodMicroService]:
+            microservice (PumpWoodMicroService):
                 PumpWoodMicroService object that will be used to fetch
                 information of the object associated with foreign key id.
-            model_class [str]:
+            model_class (str):
                 Model class that will be used to request information at
                 with a retrieve.
-            display_field [str]:
+            display_field (str):
                 Field that will be set as `__display_field__` at object
                 dictonary.
-            fields List [str]:
+            fields List (str):
                 List of the fields that should be returned at the object.
+            fields (List[str]):
+                List fields that will be retuned at the serialization.
+            **kwargs (dict):
+                Other named arguments to be passed to field.
         """
         self.microservice = microservice
         self.model_class = model_class
@@ -141,8 +140,7 @@ class MicroserviceForeignKeyField(serializers.Field):
             source=source, **kwargs)
 
     def get_fields_options_key(self):
-        """
-        Return key that will be used on fill options return.
+        """Return key that will be used on fill options return.
 
         @private
         """
@@ -156,20 +154,89 @@ class MicroserviceForeignKeyField(serializers.Field):
         if self.field_name is None:
             self.field_name = field_name
         else:
-            assert self.field_name != field_name, (
-              "It is redundant to specify field_name when it is the same")
+            if self.field_name == field_name:
+                msg = (
+                    "It is redundant to specify field_name when it "
+                    "is the same")
+                raise AttributeError(msg)
+
         super(MicroserviceForeignKeyField, self).bind(field_name, parent)
 
     def get_attribute(self, obj):
         """@private."""
         return obj
 
-    def to_representation(self, obj) -> dict:
-        """
-        Use microservice to get object at serialization.
+    def _microservice_retrieve(self, object_pk: Union[int, str],
+                               fields: List[str]) -> dict:
+        """Retrieve data using microservice and cache results.
+
+        Retrieve data using list one at the destination model_class, it
+        will cache de results on request object to reduce processing time.
 
         Args:
-            obj: Model object to retrieve foreign key associated object.
+            object_pk (Union[int, str]):
+                Object primary key to retrieve information using
+                microservice.
+            fields (List[str]):
+                Limit the fields that will be returned using microservice.
+        """
+        serializer = self.parent
+        request = serializer.context.get('request')
+        print("serializer.context:", serializer.context)
+
+        # Fetch data retrieved from microservice in same request, this
+        # is usefull specially when using list end-points with forenging kes
+        key_string = ("m[{model_class}]__pk[{pk}]__fields[{fields}]")\
+            .format(
+                model_class=self.model_class, pk=object_pk,
+                fields=fields)
+        input_string_hash = hash(key_string)
+        cache_dict = getattr(request, '_cache_microservice_fk_field', {})
+        cached_data = cache_dict.get(input_string_hash)
+        if cached_data is not None:
+            return cached_data
+
+        # If values where not cached on request, fetch information using
+        # microservice
+        try:
+            object_data = self.microservice.list_one(
+                model_class=self.model_class, pk=object_pk,
+                fields=self.fields)
+        except exceptions.PumpWoodObjectDoesNotExist:
+            return {
+                "model_class": self.model_class,
+                "__error__": 'PumpWoodObjectDoesNotExist'}
+
+        if self.display_field is not None:
+            if self.display_field not in object_data.keys():
+                msg = (
+                    "Serializer not correctly configured, it is not possible "
+                    "to find display_field[{display_field}] at the object "
+                    "of foreign_key[{foreign_key}] liked to "
+                    "model_class[{model_class}]").format(
+                        display_field=self.display_field,
+                        foreign_key=self.name, model_class=self.model_class)
+                raise exceptions.PumpWoodOtherException(
+                    msg, payload={
+                        "display_field": self.display_field,
+                        "foreign_key": self.name,
+                        "model_class": self.model_class})
+            object_data['__display_field__'] = object_data[self.display_field]
+        else:
+            object_data['__display_field__'] = None
+
+        # Cache data to reduce future microservice calls on same request
+        cache_dict[input_string_hash] = object_data
+        request._cache_microservice_fk_field = cache_dict
+        return object_data
+
+    def to_representation(self, obj) -> dict:
+        """Use microservice to get object at serialization.
+
+        Args:
+            obj:
+                Model object to retrieve foreign key associated object.
+
         Returns:
             Return the object associated with foreign key.
         """
@@ -180,15 +247,11 @@ class MicroserviceForeignKeyField(serializers.Field):
         if object_pk is None:
             return {"model_class": self.model_class}
 
-        object_data = self.microservice.retrieve(
-            model_class=self.model_class, pk=object_pk,
-            default_fields=True, fields=self.fields)
-        object_data['__display_field__'] = object_data.get(self.display_field)
-        return object_data
+        return self._microservice_retrieve(
+            object_pk=object_pk, fields=self.fields)
 
     def to_internal_value(self, data):
-        """
-        Raise error always, does not unserialize objects of this field.
+        """Raise error always, does not unserialize objects of this field.
 
         Raises:
             NotImplementedError:
@@ -199,8 +262,7 @@ class MicroserviceForeignKeyField(serializers.Field):
             "MicroserviceForeignKeyField are read-only")
 
     def to_dict(self) -> dict:
-        """
-        Return a dict with values to be used on options end-point.
+        """Return a dict with values to be used on options end-point.
 
         Returns:
             Return a dictonary with information of the field. Keys associated:
@@ -223,8 +285,7 @@ class MicroserviceForeignKeyField(serializers.Field):
 
 
 class MicroserviceRelatedField(serializers.Field):
-    """
-    Serializer field for related objects using microservice.
+    """Serializer field for related objects using microservice.
 
     This serializer will fetch a list of objectsfrom a microservice using a
     microservice object at `list_without_pag` end-point. It will use
@@ -273,31 +334,37 @@ class MicroserviceRelatedField(serializers.Field):
        list fields will be returned."""
 
     def __init__(self, microservice: PumpWoodMicroService,
-                 model_class: str,  foreign_key: str,
+                 model_class: str, foreign_key: str,
                  pk_field: str = 'id', order_by: str = ["id"],
                  fields: List[str] = None, **kwargs):
-        """
-        __init__.
+        """__init__.
 
         Args:
-            microservice [PumpWoodMicroService]:
+            microservice (PumpWoodMicroService):
                 PumpWoodMicroService object that is used on API calls.
-            model_class [str]:
+            model_class (str):
                 Model class associated with related models.
-            foreign_key [str]:
+            foreign_key (str):
                 Field associated with origin model class
                 (actual.id->destiny.foreign_key).
-            pk_field [str]:
+            pk_field (str):
                 Actual object field that will be considered as a primary key
                 to fetch destiny objects.
-            order_by [str]:
+            order_by (str):
                 Fields that will order related model results, reverse can be
                 applied using "-" at the begging of field name.
                 Ex: `['-created_at']`.
-            fields List[str]:
+            fields (List[str]):
                 Fields that will be returned from related model, if not set
                 default list fields will be returned.
+            **kwargs:
+                Other keywords for field.
         """
+        if type(order_by) is not list:
+            msg = ('order_by must be a list of strings. order_by={order_by}')\
+                .format(order_by=order_by)
+            raise AttributeError(msg)
+
         self.microservice = microservice
         self.model_class = model_class
         self.foreign_key = foreign_key
@@ -314,8 +381,7 @@ class MicroserviceRelatedField(serializers.Field):
         super(MicroserviceRelatedField, self).__init__(**kwargs)
 
     def get_fields_options_key(self):
-        """
-        Return key that will be used on fill options return.
+        """Return key that will be used on fill options return.
 
         @private
         """
@@ -329,8 +395,12 @@ class MicroserviceRelatedField(serializers.Field):
         if self.field_name is None:
             self.field_name = field_name
         else:
-            assert self.field_name != field_name, (
-              "It is redundant to specify field_name when it is the same")
+            if self.field_name == field_name:
+                msg = (
+                    "It is redundant to specify field_name when it "
+                    "is the same")
+                raise AttributeError(msg)
+
         super(MicroserviceRelatedField, self).bind(field_name, parent)
 
     def get_attribute(self, obj):
@@ -338,13 +408,11 @@ class MicroserviceRelatedField(serializers.Field):
         return obj
 
     def to_representation(self, obj) -> List[str]:
-        """
-        Use microservice to get object at serialization.
+        """Use microservice to get object at serialization.
 
         @private.
         """
         self.microservice.login()
-
         pk_field = getattr(obj, self.pk_field)
         return self.microservice.list_without_pag(
             model_class=self.model_class,
@@ -353,28 +421,27 @@ class MicroserviceRelatedField(serializers.Field):
             order_by=self.order_by)
 
     def to_internal_value(self, data):
-        """
-        Unserialize data from related objects as empty dictionary.
+        """Unserialize data from related objects as empty dictionary.
 
         @private.
         """
         return {}
 
     def to_dict(self) -> dict:
-        """
-        Return a dict with values to be used on options end-point.
+        """Return a dict with values to be used on options end-point.
 
         Returns:
-            model_class [str]:
+            A dictionary with serialized object.
+            - model_class (str):
                 Associated with serializer arguments.
-            many [bool]:
+            - many (bool):
                 Will always return True sinalizing that a list of objcts
                 with realated information.
-            pk_field [str]:
+            - pk_field (str):
                 Model pk associated with realated foreign key.
-            foreign_key [str]:
+            - foreign_key (str):
                 Forening key field associated with orgin model class.
-            order_by [List[str]]:
+            - order_by (List[str]):
                 List of fields that will order the results.
         """
         return {
@@ -386,8 +453,7 @@ class MicroserviceRelatedField(serializers.Field):
 ##################################
 # Local foreign keys serializers #
 class LocalForeignKeyField(serializers.Field):
-    """
-    Serializer field for ForeignKey using database connection.
+    """Serializer field for ForeignKey using database connection.
 
     This serializer will fetch object data from a database using a
     connection and converting to object using serializer.
@@ -427,20 +493,21 @@ class LocalForeignKeyField(serializers.Field):
     def __init__(self, serializer: Union[str, serializers.ModelSerializer],
                  display_field: str = None, fields: List[str] = None,
                  **kwargs):
-        """
-        __init__.
+        """__init__.
 
         Args:
-            serializer Union[str, serializers.ModelSerializer]:
+            serializer (Union[str, serializers.ModelSerializer]):
                 Serializer can be lazy loaded passing the path to avoid
                 circular import, serializer_cache will cache serializer to
                 remove necessity of importing the serializer at every request.
-            display_field [str]:
+            display_field (str):
                 Display field that will be set to `__display_field__` key at
                 the object.
-            fields List[str]:
+            fields (List[str]):
                 Limit the return fields to fields set, if not set will return
                 list default fields.
+            **kwargs (dict):
+                Other serializer arguments.
         """
         # Avoid circular imports for related models and cache lazzy loaded
         # serializers
@@ -452,8 +519,7 @@ class LocalForeignKeyField(serializers.Field):
         super(LocalForeignKeyField, self).__init__(**kwargs)
 
     def get_fields_options_key(self):
-        """
-        Return key that will be used on fill options return.
+        """Return key that will be used on fill options return.
 
         @private
         """
@@ -461,7 +527,8 @@ class LocalForeignKeyField(serializers.Field):
         parent_field = getattr(model, self.source)
         return parent_field.field.column
 
-    def to_representation(self, value):
+    def to_representation(self, value) -> dict:
+        """Overwrite default representation to return serialized data."""
         if self.serializer_cache is None:
             if type(self.serializer) is str:
                 self.serializer_cache = _import_function_by_string(
@@ -484,8 +551,7 @@ class LocalForeignKeyField(serializers.Field):
         return data
 
     def to_dict(self) -> dict:
-        """
-        Return a dict with values to be used on options end-point.
+        """Return a dict with values to be used on options end-point.
 
         Returns:
             model_class [str]:
@@ -510,8 +576,7 @@ class LocalForeignKeyField(serializers.Field):
 
 
 class LocalRelatedField(serializers.Field):
-    """
-    Serializer field for related objects using microservice.
+    """Serializer field for related objects using microservice.
 
     This serializer will fetch a list of objectsfrom a microservice using a
     microservice object at `list_without_pag` end-point. It will use
@@ -544,6 +609,24 @@ class LocalRelatedField(serializers.Field):
 
     def __init__(self, serializer, order_by: List[str] = ["-id"],
                  fields: List[str] = None, **kwargs):
+        """__init__.
+
+        Args:
+            serializer:
+                Serializer class or string to path of the serializer class.
+            order_by (List[str]): = ["-id"]
+                Order by list to order the results of the related objects.
+            fields (List[str]): = None
+                Retrict or enforce de fields that will be retuned by the
+                serializer. If None, only list fields will be returned.
+            **kwargs (dict):
+                Other arguments that will be passed to serializer.
+        """
+        if type(order_by) is not list:
+            msg = ('order_by must be a list of strings. order_by={order_by}')\
+                .format(order_by=order_by)
+            raise AttributeError(msg)
+
         # Avoid circular imports for related models and cache lazzy loaded
         # serializers
         self.serializer_cache = None
@@ -554,16 +637,14 @@ class LocalRelatedField(serializers.Field):
         super(LocalRelatedField, self).__init__(**kwargs)
 
     def get_fields_options_key(self):
-        """
-        Return key that will be used on fill options return.
+        """Return key that will be used on fill options return.
 
         @private
         """
         return self.source
 
     def to_representation(self, value):
-        """
-        Return all related data serialized.
+        """Return all related data serialized.
 
         @private
         """
@@ -579,25 +660,25 @@ class LocalRelatedField(serializers.Field):
             fields=self.fields).data
 
     def to_dict(self):
-        """
-        Return a dict with values to be used on options end-point.
+        """Return a dict with values to be used on options end-point.
 
         Returns:
-            model_class [str]:
+            Return a dictonary with serialization of field information.
+            - model_class [str]:
                 Model class associated with related model.
-            many [bool]:
+            - many [bool]:
                 Return always True indicating the user will receive a list
                 of objects.
-            pk_field [str]:
+            - pk_field [str]:
                 Pk field associated with origin model class that will be used
                 to query related models at foreign_key.
-            foreign_key [str]:
+            - foreign_key [str]:
                 Foreign Key that will be used to fetch realated models using
                 origin model foreign key.
-            order_by [List[str]]:
+            - order_by [List[str]]:
                 List of fields to be used to order results from realted
                 models.
-            fields [List[str]]:
+            - fields [List[str]]:
                 List of fields that will be returned by related model. If not
                 set default list fields from related model will be used.
         """
@@ -621,8 +702,7 @@ class LocalRelatedField(serializers.Field):
 
 
 class DynamicFieldsModelSerializer(serializers.ModelSerializer):
-    """
-    A ModelSerializer that change fields returned on serialization.
+    """A ModelSerializer that change fields returned on serialization.
 
     This serializer make possible to change the serialization fields acording
     to arguments that are passed on serializer instanciation.
@@ -753,25 +833,28 @@ class DynamicFieldsModelSerializer(serializers.ModelSerializer):
        Set default ClassNameField() for this field"""
 
     def __init__(self, *args, **kwargs):
-        """
-        __init__.
+        """__init__.
 
         Extend ModelSerializer from rest framework.
 
         Args:
-            fields [List[str]]:
+            fields (List[str]):
                 It is set internaly as `None` using the kwargs. List
                 the fields that should be dumped.
-            default_fields [bool]:
+            default_fields (bool):
                 It is set internaly as `False` using the kwargs. Set if only
                 default list fields set on `Meta.list_fields` should be
                 dumped.
-            foreign_key_fields [bool]:
+            foreign_key_fields (bool):
                 It is set internaly as `False` using the kwargs. Set if foreign
                 keys should be retuned.
-            related_fields [bool]:
+            related_fields (bool):
                 It is set internaly as `False` using the kwargs. Set if related
                 models should be retuned (only at many=False serializations).
+            *args:
+                Serializer arguments.
+            **kwargs:
+                Serializer named arguments.
         """
         # Don't pass the 'fields' arg up to the superclass
         many = kwargs.get("many", False)
@@ -825,8 +908,7 @@ class DynamicFieldsModelSerializer(serializers.ModelSerializer):
             self.fields.pop(field_name)
 
     def get_list_fields(self) -> List[str]:
-        """
-        Get list fields from serializer.
+        """Get list fields from serializer.
 
         Default behaviour is to extract `list_fields` from Meta class.
 
@@ -834,6 +916,7 @@ class DynamicFieldsModelSerializer(serializers.ModelSerializer):
 
         Args:
             No Args.
+
         Returns:
             Default fields to be used at default_fields=True
             serializations.
@@ -844,8 +927,7 @@ class DynamicFieldsModelSerializer(serializers.ModelSerializer):
         return list_fields
 
     def get_foreign_keys(self) -> dict:
-        """
-        Return a dictonary with all foreign_key fields.
+        """Return a dictonary with all foreign_key fields.
 
         This methods is used at fill_options end-point to correctly treat
         foreign keys.
@@ -862,8 +944,7 @@ class DynamicFieldsModelSerializer(serializers.ModelSerializer):
         return return_dict
 
     def get_related_fields(self):
-        """
-        Return a dictionary with all related fields (M2M).
+        """Return a dictionary with all related fields (M2M).
 
         This methods is used at fill_options end-point to correctly treat
         related fields.
