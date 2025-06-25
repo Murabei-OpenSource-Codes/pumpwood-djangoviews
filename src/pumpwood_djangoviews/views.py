@@ -149,7 +149,7 @@ class PumpWoodRestService(viewsets.ViewSet):
     storage_object: PumpWoodStorage
     """PumpwoodStorage object that will be used to save and retrieve
        file data from storage."""
-    microservice: PumpWoodMicroService
+    microservice: PumpWoodMicroService = None
     """PumpWoodMicroService object used to communicate with other
        microservice if necessary. Ex: Trigger ETL Jobs on object
        saving and update."""
@@ -827,7 +827,7 @@ class PumpWoodRestService(viewsets.ViewSet):
                 message=message, payload=payload)
         saved_obj.save()
 
-        if self.microservice is not None and self.trigger:
+        if hasattr(self, 'microservice') is not None and self.trigger:
             # Process ETLTrigger for the model class
             self.microservice.login()
             if data_pk is None:
@@ -1038,7 +1038,7 @@ class PumpWoodRestService(viewsets.ViewSet):
         loaded_parameters = load_action_parameters(action, parameters, request)
         result = action(**loaded_parameters)
 
-        if self.microservice is not None and self.trigger:
+        if hasattr(self, 'microservice') is not None and self.trigger:
             self.microservice.login()
             self.microservice.execute_action(
                 "ETLTrigger", action="process_triggers", parameters={
