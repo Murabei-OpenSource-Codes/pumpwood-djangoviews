@@ -98,6 +98,13 @@ class RequestObjectCache:
                 model_class=model_class, pk=object_pk,
                 fields=fields)
         input_string_hash = hash(key_string)
+        if request is None:
+            print("RequestObjectCache.get: request is None")
+            return {
+                'cache_key': input_string_hash,
+                'cache_data': None
+            }
+
         cache_dict = getattr(request, cls.CACHE_ATTRIBUTE, {})
         cached_data = cache_dict.get(input_string_hash)
         return {
@@ -123,6 +130,9 @@ class RequestObjectCache:
         Returns:
             Object cached data at the request.
         """
+        if request is None:
+            print("RequestObjectCache.set: request is None")
+
         cache_dict = getattr(request, cls.CACHE_ATTRIBUTE, {})
         cache_dict[cache_key] = object_data
         setattr(request, cls.CACHE_ATTRIBUTE, cache_dict)
@@ -606,16 +616,16 @@ class LocalForeignKeyField(serializers.Field):
                 self.serializer_cache = self.serializer
 
         # Return an empty object if object pk is None
+        model = self.parent.Meta.model
+        parent_field = getattr(model, self.source)
+        model_class = parent_field.field.related_model.__name__
         if value is None:
-            model = self.parent.Meta.model
-            parent_field = getattr(model, self.source)
-            model_class = parent_field.field.related_model.__name__
             return {"model_class": model_class}
 
         # Get data from cache from request if avaiable
         request = self.parent.context.get('request')
         cache_response = RequestObjectCache.get(
-            request=request, model_class=self.model_class, object_pk=value,
+            request=request, model_class=model_class, object_pk=value,
             fields=self.fields)
         cache_key = cache_response['cache_key']
         cache_data = cache_response['cache_data']
@@ -977,7 +987,7 @@ class DynamicFieldsModelSerializer(serializers.ModelSerializer):
                 is_related_local = isinstance(item, LocalRelatedField)
                 is_related_micro = isinstance(item, MicroserviceRelatedField)
                 is_related = is_related_local or is_related_micro
-                if (is_related and not related_fields) or many:
+                if (is_related and not related_fields):
                     to_remove.append(key)
                     continue
 
