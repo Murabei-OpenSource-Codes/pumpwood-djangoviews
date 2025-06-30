@@ -754,8 +754,8 @@ class LocalRelatedField(serializers.Field):
         request = self.parent.context.get('request')
         return self.serializer_cache(
             value.order_by(*self.order_by).all(),
-            many=True, default_fields=True,
-            fields=self.fields, context={'request': request}).data
+            many=True, default_fields=True, fields=self.fields,
+            context={'request': request}).data
 
     def to_dict(self):
         """Return a dict with values to be used on options end-point.
@@ -954,9 +954,6 @@ class DynamicFieldsModelSerializer(serializers.ModelSerializer):
             **kwargs:
                 Serializer named arguments.
         """
-        # Don't pass the 'fields' arg up to the superclass
-        many = kwargs.get("many", False)
-
         # Extract custom fields
         fields = kwargs.pop("fields", None)
         default_fields = kwargs.pop("default_fields", False)
