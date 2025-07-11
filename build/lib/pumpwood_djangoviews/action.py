@@ -97,9 +97,14 @@ class Action:
     """Function argument that will receive Django request object``. This
        object can be used to pass context to serializers and other
        funcionalities."""
+    permission_role: str
+    """Permission associated with action, if not set it will consider default
+       permission pumpwood scheme: `can_run_actions`/custom action
+       permission."""
 
     def __init__(self, func: Callable, info: str,
-                 auth_header: str = None, request: str = None) -> Callable:
+                 auth_header: str = None, request: str = None,
+                 permission_role="can_run_actions") -> Callable:
         """__init__.
 
         Args:
@@ -115,6 +120,12 @@ class Action:
             request (str):
                 Function argument that will be populated with Django's request
                 object.
+            permission_role (str):
+                Set a permission role to by pass Pumpwood action permission
+                validation. Role must be in `['can_delete', 'can_delete_file',
+                'can_delete_many', 'can_list', 'can_list_without_pag',
+                'can_retrieve', 'can_retrieve_file', 'can_run_actions',
+                'can_save', 'authenticated', 'default']`.
         """
         def extract_param_type(param) -> None:
             """Extract paramter type."""
@@ -188,6 +199,15 @@ class Action:
                 # Does not return cls parameter from class functions
                 continue
 
+            # Do not return as function paramters auth_header or request
+            # since they are set by Pumpwood.
+            if auth_header is not None:
+                if key == auth_header:
+                    continue
+            if request is not None:
+                if key == request:
+                    continue
+
             param = function_parameters[key]
             param_type = extract_param_type(param)
             temp_dict = {
@@ -207,6 +227,7 @@ class Action:
         self.info = info
         self.auth_header = auth_header
         self.request = request
+        self.permission_role = permission_role
 
     def to_dict(self) -> dict:
         """Return dict representation of the action.
@@ -223,6 +244,8 @@ class Action:
             - **parameters [dict]**: Arguments of the function with
                 information of types, default values.
             - **doc_string [str]**: Doc string associated with the function.
+            - **permission_role [str]**: Permission role associated with
+                action.
         """
         result = {
             "action_name": self.action_name,
@@ -230,12 +253,13 @@ class Action:
             "info": self.info,
             "return": self.func_return,
             "parameters": self.parameters,
-            "doc_string": self.doc_string}
+            "doc_string": self.doc_string,
+            "permission_role": self.permission_role}
         return result
 
 
 def action(info: str = "", auth_header: str = None,
-           request: str = None):
+           request: str = None, permission_role: str = "can_run_actions"):
     """Define decorator that will convert the function into a rest action.
 
     Args:
@@ -250,6 +274,12 @@ def action(info: str = "", auth_header: str = None,
             Pass the request as a parameter to the function. This variable
             will set the name of the argument that will receive request
             as parameter.
+        permission_role (str):
+            Set a permission role to by pass Pumpwood action permission
+            validation. Role must be in `['can_delete', 'can_delete_file',
+            'can_delete_many', 'can_list', 'can_list_without_pag',
+            'can_retrieve', 'can_retrieve_file', 'can_run_actions',
+            'can_save']`.
 
     Returns:
         Return decorated function.
@@ -287,7 +317,7 @@ def action(info: str = "", auth_header: str = None,
         func.is_action = True
         func.action_object = Action(
             func=func, info=info, auth_header=auth_header,
-            request=request)
+            request=request, permission_role=permission_role)
         return func
     return action_decorator
 

@@ -1,5 +1,4 @@
-"""
-Create views using Pumpwood pattern.
+"""Create views using Pumpwood pattern.
 
 Define base views associated with Pumpwood end-points.
 """

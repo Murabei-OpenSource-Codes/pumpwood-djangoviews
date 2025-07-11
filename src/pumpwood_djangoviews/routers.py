@@ -8,6 +8,7 @@ consumed by the client side.
 import os
 from slugify import slugify
 from django.urls import path
+from rest_framework import viewsets
 from rest_framework.routers import BaseRouter
 from django.core.exceptions import ImproperlyConfigured
 from pumpwood_djangoviews.views import (
@@ -65,21 +66,24 @@ class PumpWoodRouter(BaseRouter):
         base_name = slugify(suffix + base_name)
         self.registry.append((viewset, base_name))
 
-    def validate_view(self, viewset):
+    def validate_view(self, viewset: viewsets.ViewSet):
         """Validate if view is of correct type.
 
         Args:
-            viewset: Rest framework view set, it must have inherited from
-            PumpWoodRestService.
+            viewset (ViewSet):
+                Rest framework view set, it must be a sub class of
+                PumpWoodRestService.
 
         Raises:
             ImproperlyConfigured:
                 If view is not a PumpWoodRestService.
         """
-        if PumpWoodRestService not in viewset.__bases__:
-            raise ImproperlyConfigured(
-                "PumpWoodRouter applied over a view that isn't a "
-                "PumpWoodRestService")
+        if issubclass(viewset, PumpWoodRestService):
+            return True
+
+        raise ImproperlyConfigured(
+            "PumpWoodRouter applied over a view that isn't a "
+            "PumpWoodRestService")
 
     def get_registry_pattern(self, viewset, basename):
         """Register patterns for pumpwood end-points.
@@ -152,7 +156,7 @@ class PumpWoodRouter(BaseRouter):
         resp_list.append(
             path(
                 url_retrieve.format(basename=basename),
-                viewset.as_view({'get': 'retrieve', 'delete': 'delete'}),
+                viewset.as_view({'get': 'retrieve'}),
                 name='rest__{basename}__retrieve'.format(basename=basename)))
 
         # retrieve file
@@ -161,15 +165,6 @@ class PumpWoodRouter(BaseRouter):
             path(url_retrieve.format(basename=basename),
                  viewset.as_view({'get': 'retrieve_file'}),
                  name='rest__{basename}__retrieve_file'.format(
-                    basename=basename)))
-
-        # retrieve file
-        url_retrieve = 'rest/{basename}/remove-file-field/<int:pk>/'
-        resp_list.append(
-            path(
-                url_retrieve.format(basename=basename),
-                viewset.as_view({'delete': 'remove_file_field'}),
-                name='rest__{basename}__remove_file_field'.format(
                     basename=basename)))
 
         # delete
@@ -187,6 +182,24 @@ class PumpWoodRouter(BaseRouter):
                 viewset.as_view({'post': 'delete_many'}),
                 name='rest__{basename}__delete_many'.format(
                     basename=basename)))
+
+        # delete file
+        url_retrieve = 'rest/{basename}/remove-file-field/<int:pk>/'
+        resp_list.append(
+            path(
+                url_retrieve.format(basename=basename),
+                viewset.as_view({'delete': 'remove_file_field'}),
+                name='rest__{basename}__remove_file_field'.format(
+                    basename=basename)))
+
+        url_retrieve = 'rest/{basename}/delete-file/<int:pk>/'
+        resp_list.append(
+            path(
+                url_retrieve.format(basename=basename),
+                viewset.as_view({'delete': 'remove_file_field'}),
+                name='rest__{basename}__remove_file_field'.format(
+                    basename=basename)))
+
         # save
         url_save = 'rest/{basename}/save/'
         resp_list.append(
@@ -264,6 +277,7 @@ class PumpWoodRouter(BaseRouter):
         return resp_list
 
     def get_urls(self):
+        """Get all routers URLs."""
         ret = []
         for viewset, basename in self.registry:
             ret.extend(self.get_registry_pattern(viewset, basename))
@@ -271,8 +285,7 @@ class PumpWoodRouter(BaseRouter):
 
 
 class PumpWoodDataBaseRouter(PumpWoodRouter):
-    """
-    Define a Router for PumpWoodDataBaseRestService views.
+    """Define a Router for PumpWoodDataBaseRestService views.
 
     Add some data routes to PumpWoodRouter.
 
@@ -283,14 +296,33 @@ class PumpWoodDataBaseRouter(PumpWoodRouter):
         - `[POST] rest/{basename}/bulk-save/`: Save many objects at same
             time, it can be used to upload large datasets.
     """
-
     def validate_view(self, viewset):
-        if PumpWoodDataBaseRestService not in viewset.__bases__:
-            msg = ("PumpWoodRouter applied over a view that isn't a "
-                   "PumpWoodDataBaseRestService")
-            raise ImproperlyConfigured(msg)
+        """Validate if view is of database type."""
+        if issubclass(viewset, PumpWoodDataBaseRestService):
+            return True
+        msg = (
+            "PumpWoodRouter applied over a view that isn't a "
+            "PumpWoodDataBaseRestService")
+        raise ImproperlyConfigured(msg)
 
     def get_registry_pattern(self, viewset, basename):
+        """Register patterns for pumpwood end-points.
+
+        Base name is set acording to Model name (model_class).
+
+        Patterns registered:
+        - `[POST] rest/{basename}/pivot/`: Get data directly from query
+            without serialzer, it is also possible to ask to pivot
+            information.
+        - `[POST] rest/{basename}/bulk-save/`: Bulk save information on
+            database.
+
+        Returns:
+            Return a list of URLs associated with model_class with Pumpwood
+            end-points.
+
+        @private
+        """
         resp_list = super(PumpWoodDataBaseRouter, self).get_registry_pattern(
             viewset, basename)
 
