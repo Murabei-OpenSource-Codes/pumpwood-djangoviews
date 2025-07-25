@@ -99,7 +99,6 @@ class RequestObjectCache:
                 fields=fields)
         input_string_hash = hash(key_string)
         if request is None:
-            print("RequestObjectCache.get: request is None")
             return {
                 'cache_key': input_string_hash,
                 'cache_data': None
@@ -131,7 +130,7 @@ class RequestObjectCache:
             Object cached data at the request.
         """
         if request is None:
-            print("RequestObjectCache.set: request is None")
+            return False
 
         cache_dict = getattr(request, cls.CACHE_ATTRIBUTE, {})
         cache_dict[cache_key] = object_data
