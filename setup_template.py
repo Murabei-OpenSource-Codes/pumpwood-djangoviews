@@ -34,8 +34,11 @@ setuptools.setup(
         'Shapely>=1.7.0',
         'geopandas>=0.8.1',
         'pumpwood-i8n>=0.1',
-        'diskcache>=5.6.3'
+        'diskcache>=5.6.3',
+        'pumpwood-communication>=2.0',
+        'orjson>=3.11.3',
+        'loguru>=0.7.3'
     ],
     packages=setuptools.find_packages(where="src"),
-    python_requires=">=3.6",
+    python_requires=">=3.12",
 )

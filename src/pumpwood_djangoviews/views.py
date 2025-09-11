@@ -20,7 +20,7 @@ from werkzeug.utils import secure_filename
 from pumpwood_miscellaneous.storage import PumpWoodStorage
 from pumpwood_communication import exceptions
 from pumpwood_communication.microservices import PumpWoodMicroService
-from pumpwood_djangoviews.renderer import PumpwoodJSONRenderer
+from pumpwood_djangoviews.rest import PumpwoodJSONRenderer
 from pumpwood_djangoviews.query import filter_by_dict, aggregate_by_dict
 from pumpwood_djangoviews.action import load_action_parameters
 from pumpwood_djangoviews.aux.map_django_types import django_map

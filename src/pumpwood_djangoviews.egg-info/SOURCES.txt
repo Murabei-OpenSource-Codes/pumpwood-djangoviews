@@ -6,7 +6,7 @@ setup.py
 src/pumpwood_djangoviews/__init__.py
 src/pumpwood_djangoviews/action.py
 src/pumpwood_djangoviews/query.py
-src/pumpwood_djangoviews/renderer.py
+src/pumpwood_djangoviews/rest.py
 src/pumpwood_djangoviews/routers.py
 src/pumpwood_djangoviews/serializers.py
 src/pumpwood_djangoviews/storage.py
