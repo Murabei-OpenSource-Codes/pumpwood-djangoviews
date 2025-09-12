@@ -1,5 +1,4 @@
-"""
-Create views using Pumpwood pattern.
+"""Create views using Pumpwood pattern.
 
 Define base views associated with Pumpwood end-points.
 """
@@ -21,7 +20,7 @@ from werkzeug.utils import secure_filename
 from pumpwood_miscellaneous.storage import PumpWoodStorage
 from pumpwood_communication import exceptions
 from pumpwood_communication.microservices import PumpWoodMicroService
-from pumpwood_djangoviews.renderer import PumpwoodJSONRenderer
+from pumpwood_djangoviews.rest import PumpwoodJSONRenderer
 from pumpwood_djangoviews.query import filter_by_dict, aggregate_by_dict
 from pumpwood_djangoviews.action import load_action_parameters
 from pumpwood_djangoviews.aux.map_django_types import django_map
@@ -149,7 +148,7 @@ class PumpWoodRestService(viewsets.ViewSet):
     storage_object: PumpWoodStorage
     """PumpwoodStorage object that will be used to save and retrieve
        file data from storage."""
-    microservice: PumpWoodMicroService
+    microservice: PumpWoodMicroService = None
     """PumpWoodMicroService object used to communicate with other
        microservice if necessary. Ex: Trigger ETL Jobs on object
        saving and update."""
@@ -827,7 +826,7 @@ class PumpWoodRestService(viewsets.ViewSet):
                 message=message, payload=payload)
         saved_obj.save()
 
-        if self.microservice is not None and self.trigger:
+        if hasattr(self, 'microservice') is not None and self.trigger:
             # Process ETLTrigger for the model class
             self.microservice.login()
             if data_pk is None:
@@ -1038,7 +1037,7 @@ class PumpWoodRestService(viewsets.ViewSet):
         loaded_parameters = load_action_parameters(action, parameters, request)
         result = action(**loaded_parameters)
 
-        if self.microservice is not None and self.trigger:
+        if hasattr(self, 'microservice') is not None and self.trigger:
             self.microservice.login()
             self.microservice.execute_action(
                 "ETLTrigger", action="process_triggers", parameters={
@@ -1113,6 +1112,7 @@ class PumpWoodRestService(viewsets.ViewSet):
         microservice_related_dict = {}
 
         all_info = {}
+        primary_keys = []
         for field_name, field_serializer in serializer_fields.items():
             ################################################################
             # Do not create relations between models in search description #
@@ -1163,21 +1163,15 @@ class PumpWoodRestService(viewsets.ViewSet):
             db_index = getattr(f, "db_index", False)
             unique = getattr(f, "unique", False)
 
-            column = None
-            if primary_key:
-                column = "pk"
-            else:
-                column = f.column
-
             tag = translation_tag_template.format(
-                model_class=model_class, field=column)
+                model_class=model_class, field=f.column)
             column__verbose = _.t(
-                sentence=column, tag=tag + "__column")
+                sentence=f.column, tag=tag + "__column")
             help_text__verbose = _.t(
                 sentence=help_text, tag=tag + "__help_text")
             column_info = {
                 'primary_key': primary_key,
-                "column": column,
+                "column": f.column,
                 "column__verbose": column__verbose,
                 "help_text": help_text,
                 "help_text__verbose": help_text__verbose,
@@ -1187,8 +1181,8 @@ class PumpWoodRestService(viewsets.ViewSet):
                 "indexed": db_index or primary_key,
                 "unique": unique,
                 "read_only": (
-                    (column in read_only_fields) or
-                    (field_name == 'pk')
+                    (f.column in read_only_fields) or
+                    (field_name == 'id')
                 ), "extra_info": {}}
 
             # Get choice options if available
@@ -1205,19 +1199,70 @@ class PumpWoodRestService(viewsets.ViewSet):
                         "value": choice[0]}
                 column_info["in"] = in_list
 
+            if f.column == "id":
+                column_info["default"] = "#autoincrement#"
+                column_info["doc_string"] = "Auto increment primary key"
+
             # Set auto-increment for primary keys
             if primary_key:
-                column_info["column"] = "pk"
-                column_info["default"] = "#autoincrement#"
-                column_info["doc_string"] = "object primary key"
+                primary_keys.append(column_info["column"])
 
             # Adjust type if file
-            file_field = cls.file_fields.get(column)
+            file_field = cls.file_fields.get(f.column)
             if file_field is not None:
                 column_info["type"] = "file"
                 column_info["extra_info"] = {
                     "permited_file_types": file_field}
-            all_info[column] = column_info
+            all_info[f.column] = column_info
+
+        #################################
+        # Adding primary key definition #
+        if len(primary_keys) == 1:
+            column = "pk"
+            help_text = "table primary key"
+            tag = translation_tag_template.format(
+                model_class=model_class, field=column)
+            column__verbose = _.t(
+                sentence=column, tag=tag + "__column")
+            help_text__verbose = _.t(
+                sentence=help_text, tag=tag + "__help_text")
+
+            all_info["pk"] = {
+                "primary_key": True,
+                "column": primary_keys,
+                "column__verbose": column__verbose,
+                "help_text": help_text,
+                "help_text__verbose": help_text__verbose,
+                "type": "#autoincrement#",
+                "nullable": False,
+                "read_only": True,
+                "default": "#autoincrement#",
+                "unique": True,
+                "partition": None}
+        else:
+            column = "pk"
+            help_text = "base64 encoded json dictionary"
+            tag = translation_tag_template.format(
+                model_class=model_class, field=column)
+            help_text__verbose = _.t(
+                sentence=help_text, tag=tag + "__help_text")
+            column__verbose = [
+                _.t(sentence=x, tag=tag + "__column")
+                for x in cls._primary_keys]
+
+            all_info["pk"] = {
+                "primary_key": True,
+                "column": primary_keys,
+                "column__verbose": column__verbose,
+                "help_text": help_text,
+                "help_text__verbose": help_text__verbose,
+                "type": "str",
+                "nullable": False,
+                "read_only": True,
+                "default": None,
+                "unique": True,
+                # TODO: Add partition information
+                "partition": None}
 
         #############################################
         # Adding field description for foreign keys #

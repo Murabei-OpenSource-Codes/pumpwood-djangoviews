@@ -61,6 +61,83 @@ class ClassNameField(serializers.Field):
 
 ####################################
 # Microservice related serializers #
+class RequestObjectCache:
+    """Class to help setting and retrieve request cached objects.
+
+    It is used on retrieve foreign key objects, both using microservice or
+    local.
+    """
+
+    CACHE_KEY_TEMPLATE = "m[{model_class}]__pk[{pk}]__fields[{fields}]"
+    CACHE_ATTRIBUTE = "_pumpwood_cache"
+
+    @classmethod
+    def get(cls, request, object_pk: Union[str, int], model_class: str,
+            fields: List[str]) -> dict:
+        """Get request cached object.
+
+        This will reduce requesting same object over microservice or database.
+
+        Args:
+            request:
+                Django request at which data is cached using `_pumpwood_cache`
+                attribute.
+            object_pk (Union[str, int]):
+                Primary key associated with the object to check the if avaiable
+                at the cache.
+            model_class (str):
+                Model class associated with the object.
+            fields (List[str]):
+                Which fields should be retrieved for the serialized object.
+
+        Returns:
+            Object cached data at the request.
+        """
+        key_string = cls.CACHE_KEY_TEMPLATE\
+            .format(
+                model_class=model_class, pk=object_pk,
+                fields=fields)
+        input_string_hash = hash(key_string)
+        if request is None:
+            return {
+                'cache_key': input_string_hash,
+                'cache_data': None
+            }
+
+        cache_dict = getattr(request, cls.CACHE_ATTRIBUTE, {})
+        cached_data = cache_dict.get(input_string_hash)
+        return {
+            'cache_key': input_string_hash,
+            'cache_data': cached_data
+        }
+
+    @classmethod
+    def set(cls, request, cache_key: str, object_data: dict) -> bool:
+        """Set request cached object.
+
+        Set object cache at the request object.
+
+        Args:
+            request:
+                Django request at which data is cached using `_pumpwood_cache`
+                attribute.
+            cache_key (str):
+                Key associated with the cached object.
+            object_data (dict):
+                Object data to be set on cache.
+
+        Returns:
+            Object cached data at the request.
+        """
+        if request is None:
+            return False
+
+        cache_dict = getattr(request, cls.CACHE_ATTRIBUTE, {})
+        cache_dict[cache_key] = object_data
+        setattr(request, cls.CACHE_ATTRIBUTE, cache_dict)
+        return True
+
+
 class MicroserviceForeignKeyField(serializers.Field):
     """Serializer field for ForeignKey using microservice.
 
@@ -104,7 +181,7 @@ class MicroserviceForeignKeyField(serializers.Field):
 
     def __init__(self, source: str, microservice: PumpWoodMicroService,
                  model_class: str, display_field: str = None,
-                 fields: List[str] = None, **kwargs):
+                 fields: List[str] = None, request=None, **kwargs):
         """__init__.
 
         Args:
@@ -124,6 +201,9 @@ class MicroserviceForeignKeyField(serializers.Field):
                 List of the fields that should be returned at the object.
             fields (List[str]):
                 List fields that will be retuned at the serialization.
+            request:
+                Django request, passed a argument for recursive serialization
+                of the object.
             **kwargs (dict):
                 Other named arguments to be passed to field.
         """
@@ -180,21 +260,16 @@ class MicroserviceForeignKeyField(serializers.Field):
             fields (List[str]):
                 Limit the fields that will be returned using microservice.
         """
-        serializer = self.parent
-        request = serializer.context.get('request')
-        print("serializer.context:", serializer.context)
-
         # Fetch data retrieved from microservice in same request, this
         # is usefull specially when using list end-points with forenging kes
-        key_string = ("m[{model_class}]__pk[{pk}]__fields[{fields}]")\
-            .format(
-                model_class=self.model_class, pk=object_pk,
-                fields=fields)
-        input_string_hash = hash(key_string)
-        cache_dict = getattr(request, '_cache_microservice_fk_field', {})
-        cached_data = cache_dict.get(input_string_hash)
-        if cached_data is not None:
-            return cached_data
+        request = self.parent.context.get('request')
+        cache_response = RequestObjectCache.get(
+            request=request, model_class=self.model_class, object_pk=object_pk,
+            fields=fields)
+        cache_data = cache_response['cache_data']
+        cache_key = cache_response['cache_key']
+        if cache_data is not None:
+            return cache_data
 
         # If values where not cached on request, fetch information using
         # microservice
@@ -226,8 +301,9 @@ class MicroserviceForeignKeyField(serializers.Field):
             object_data['__display_field__'] = None
 
         # Cache data to reduce future microservice calls on same request
-        cache_dict[input_string_hash] = object_data
-        request._cache_microservice_fk_field = cache_dict
+        RequestObjectCache.set(
+            request=request, cache_key=cache_key,
+            object_data=object_data)
         return object_data
 
     def to_representation(self, obj) -> dict:
@@ -241,7 +317,6 @@ class MicroserviceForeignKeyField(serializers.Field):
             Return the object associated with foreign key.
         """
         self.microservice.login()
-
         object_pk = getattr(obj, self.source)
         # Return an empty object if object pk is None
         if object_pk is None:
@@ -400,7 +475,6 @@ class MicroserviceRelatedField(serializers.Field):
                     "It is redundant to specify field_name when it "
                     "is the same")
                 raise AttributeError(msg)
-
         super(MicroserviceRelatedField, self).bind(field_name, parent)
 
     def get_attribute(self, obj):
@@ -492,7 +566,7 @@ class LocalForeignKeyField(serializers.Field):
 
     def __init__(self, serializer: Union[str, serializers.ModelSerializer],
                  display_field: str = None, fields: List[str] = None,
-                 **kwargs):
+                 request=None, **kwargs):
         """__init__.
 
         Args:
@@ -506,6 +580,9 @@ class LocalForeignKeyField(serializers.Field):
             fields (List[str]):
                 Limit the return fields to fields set, if not set will return
                 list default fields.
+            request:
+                Django request to be passed as arguments for recursive
+                serialization of related fields.
             **kwargs (dict):
                 Other serializer arguments.
         """
@@ -529,6 +606,7 @@ class LocalForeignKeyField(serializers.Field):
 
     def to_representation(self, value) -> dict:
         """Overwrite default representation to return serialized data."""
+        # Get request to cache results
         if self.serializer_cache is None:
             if type(self.serializer) is str:
                 self.serializer_cache = _import_function_by_string(
@@ -537,18 +615,35 @@ class LocalForeignKeyField(serializers.Field):
                 self.serializer_cache = self.serializer
 
         # Return an empty object if object pk is None
+        model = self.parent.Meta.model
+        parent_field = getattr(model, self.source)
+        model_class = parent_field.field.related_model.__name__
         if value is None:
-            model = self.parent.Meta.model
-            parent_field = getattr(model, self.source)
-            model_class = parent_field.field.related_model.__name__
             return {"model_class": model_class}
 
-        data = self.serializer_cache(
+        # Get data from cache from request if avaiable
+        request = self.parent.context.get('request')
+        cache_response = RequestObjectCache.get(
+            request=request, model_class=model_class, object_pk=value,
+            fields=self.fields)
+        cache_key = cache_response['cache_key']
+        cache_data = cache_response['cache_data']
+        # Return the cached data if avaliable
+        if cache_data is not None:
+            return cache_data
+
+        # Retrieve data from the database
+        object_data = self.serializer_cache(
             value, many=False, fields=self.fields,
-            default_fields=True).data
-        display_field = data.get(self.display_field, None)
-        data['__display_field__'] = display_field
-        return data
+            default_fields=True, context={'request': request}).data
+        display_field = object_data.get(self.display_field, None)
+        object_data['__display_field__'] = display_field
+
+        # Set the cache for futher serializations on the request
+        RequestObjectCache.set(
+            request=request, cache_key=cache_key,
+            object_data=object_data)
+        return object_data
 
     def to_dict(self) -> dict:
         """Return a dict with values to be used on options end-point.
@@ -654,10 +749,12 @@ class LocalRelatedField(serializers.Field):
                     self.serializer)
             else:
                 self.serializer_cache = self.serializer
+
+        request = self.parent.context.get('request')
         return self.serializer_cache(
             value.order_by(*self.order_by).all(),
-            many=True, default_fields=True,
-            fields=self.fields).data
+            many=True, default_fields=True, fields=self.fields,
+            context={'request': request}).data
 
     def to_dict(self):
         """Return a dict with values to be used on options end-point.
@@ -856,9 +953,6 @@ class DynamicFieldsModelSerializer(serializers.ModelSerializer):
             **kwargs:
                 Serializer named arguments.
         """
-        # Don't pass the 'fields' arg up to the superclass
-        many = kwargs.get("many", False)
-
         # Extract custom fields
         fields = kwargs.pop("fields", None)
         default_fields = kwargs.pop("default_fields", False)
@@ -889,7 +983,7 @@ class DynamicFieldsModelSerializer(serializers.ModelSerializer):
                 is_related_local = isinstance(item, LocalRelatedField)
                 is_related_micro = isinstance(item, MicroserviceRelatedField)
                 is_related = is_related_local or is_related_micro
-                if (is_related and not related_fields) or many:
+                if (is_related and not related_fields):
                     to_remove.append(key)
                     continue
 
