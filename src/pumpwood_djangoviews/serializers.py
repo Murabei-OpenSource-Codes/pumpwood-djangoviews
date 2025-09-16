@@ -1,7 +1,6 @@
 """Define base serializer for pumpwood and custom fields."""
 import os
 import importlib
-from loguru import logger
 from typing import List, Union
 from rest_framework import serializers
 from pumpwood_communication.microservices import PumpWoodMicroService
@@ -536,12 +535,11 @@ class LocalForeignKeyField(serializers.Field):
             'context': 'pumpwood_djangoviews-local_pk_field',
             'user_id': request.user.id,
             'model_class': model_class,
-            'object_pk': value,
+            'object_pk': value.id,
             'fields': self.fields}
         cache_response = default_cache.get(hash_dict=hash_dict)
         # Return the cached data if avaliable
         if cache_response is not None:
-            print(hash_dict)
             return cache_response
 
         # Retrieve data from the database
