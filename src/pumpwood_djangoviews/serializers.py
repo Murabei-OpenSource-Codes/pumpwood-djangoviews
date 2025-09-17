@@ -5,6 +5,7 @@ from typing import List, Union
 from rest_framework import serializers
 from pumpwood_communication.microservices import PumpWoodMicroService
 from pumpwood_communication import exceptions
+from pumpwood_communication.cache import default_cache
 
 
 def _import_function_by_string(module_function_string):
@@ -57,85 +58,6 @@ class ClassNameField(serializers.Field):
         @private
         """
         return data
-
-
-####################################
-# Microservice related serializers #
-class RequestObjectCache:
-    """Class to help setting and retrieve request cached objects.
-
-    It is used on retrieve foreign key objects, both using microservice or
-    local.
-    """
-
-    CACHE_KEY_TEMPLATE = "m[{model_class}]__pk[{pk}]__fields[{fields}]"
-    CACHE_ATTRIBUTE = "_pumpwood_cache"
-
-    @classmethod
-    def get(cls, request, object_pk: Union[str, int], model_class: str,
-            fields: List[str]) -> dict:
-        """Get request cached object.
-
-        This will reduce requesting same object over microservice or database.
-
-        Args:
-            request:
-                Django request at which data is cached using `_pumpwood_cache`
-                attribute.
-            object_pk (Union[str, int]):
-                Primary key associated with the object to check the if avaiable
-                at the cache.
-            model_class (str):
-                Model class associated with the object.
-            fields (List[str]):
-                Which fields should be retrieved for the serialized object.
-
-        Returns:
-            Object cached data at the request.
-        """
-        key_string = cls.CACHE_KEY_TEMPLATE\
-            .format(
-                model_class=model_class, pk=object_pk,
-                fields=fields)
-        input_string_hash = hash(key_string)
-        if request is None:
-            return {
-                'cache_key': input_string_hash,
-                'cache_data': None
-            }
-
-        cache_dict = getattr(request, cls.CACHE_ATTRIBUTE, {})
-        cached_data = cache_dict.get(input_string_hash)
-        return {
-            'cache_key': input_string_hash,
-            'cache_data': cached_data
-        }
-
-    @classmethod
-    def set(cls, request, cache_key: str, object_data: dict) -> bool:
-        """Set request cached object.
-
-        Set object cache at the request object.
-
-        Args:
-            request:
-                Django request at which data is cached using `_pumpwood_cache`
-                attribute.
-            cache_key (str):
-                Key associated with the cached object.
-            object_data (dict):
-                Object data to be set on cache.
-
-        Returns:
-            Object cached data at the request.
-        """
-        if request is None:
-            return False
-
-        cache_dict = getattr(request, cls.CACHE_ATTRIBUTE, {})
-        cache_dict[cache_key] = object_data
-        setattr(request, cls.CACHE_ATTRIBUTE, cache_dict)
-        return True
 
 
 class MicroserviceForeignKeyField(serializers.Field):
@@ -262,21 +184,13 @@ class MicroserviceForeignKeyField(serializers.Field):
         """
         # Fetch data retrieved from microservice in same request, this
         # is usefull specially when using list end-points with forenging kes
-        request = self.parent.context.get('request')
-        cache_response = RequestObjectCache.get(
-            request=request, model_class=self.model_class, object_pk=object_pk,
-            fields=fields)
-        cache_data = cache_response['cache_data']
-        cache_key = cache_response['cache_key']
-        if cache_data is not None:
-            return cache_data
+        # request = self.parent.context.get('request')
 
-        # If values where not cached on request, fetch information using
-        # microservice
         try:
+            # Use disk cache to reduce calls to backend
             object_data = self.microservice.list_one(
                 model_class=self.model_class, pk=object_pk,
-                fields=self.fields)
+                fields=self.fields, use_disk_cache=True)
         except exceptions.PumpWoodObjectDoesNotExist:
             return {
                 "model_class": self.model_class,
@@ -299,11 +213,6 @@ class MicroserviceForeignKeyField(serializers.Field):
             object_data['__display_field__'] = object_data[self.display_field]
         else:
             object_data['__display_field__'] = None
-
-        # Cache data to reduce future microservice calls on same request
-        RequestObjectCache.set(
-            request=request, cache_key=cache_key,
-            object_data=object_data)
         return object_data
 
     def to_representation(self, obj) -> dict:
@@ -321,7 +230,6 @@ class MicroserviceForeignKeyField(serializers.Field):
         # Return an empty object if object pk is None
         if object_pk is None:
             return {"model_class": self.model_class}
-
         return self._microservice_retrieve(
             object_pk=object_pk, fields=self.fields)
 
@@ -623,14 +531,16 @@ class LocalForeignKeyField(serializers.Field):
 
         # Get data from cache from request if avaiable
         request = self.parent.context.get('request')
-        cache_response = RequestObjectCache.get(
-            request=request, model_class=model_class, object_pk=value,
-            fields=self.fields)
-        cache_key = cache_response['cache_key']
-        cache_data = cache_response['cache_data']
+        hash_dict = {
+            'context': 'pumpwood_djangoviews-local_pk_field',
+            'user_id': request.user.id,
+            'model_class': model_class,
+            'object_pk': value.id,
+            'fields': self.fields}
+        cache_response = default_cache.get(hash_dict=hash_dict)
         # Return the cached data if avaliable
-        if cache_data is not None:
-            return cache_data
+        if cache_response is not None:
+            return cache_response
 
         # Retrieve data from the database
         object_data = self.serializer_cache(
@@ -640,9 +550,7 @@ class LocalForeignKeyField(serializers.Field):
         object_data['__display_field__'] = display_field
 
         # Set the cache for futher serializations on the request
-        RequestObjectCache.set(
-            request=request, cache_key=cache_key,
-            object_data=object_data)
+        default_cache.set(hash_dict=hash_dict, value=object_data)
         return object_data
 
     def to_dict(self) -> dict:
