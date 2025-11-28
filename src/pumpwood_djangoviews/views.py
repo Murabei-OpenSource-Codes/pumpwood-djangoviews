@@ -1318,11 +1318,7 @@ class PumpWoodRestService(viewsets.ViewSet):
         for key, item in microservice_related_dict.items():
             tag = translation_tag_template.format(
                 model_class=model_class, field=key)
-            print("Related object:", item)
             help_text = getattr(item, 'help_text', '')
-            print("help_text:", help_text)
-            print("item.help_text:", item.help_text)
-            print("item.__dict__.keys():", item.__dict__.keys())
 
             column__verbose = _.t(
                 sentence=key, tag=tag + "__column")
