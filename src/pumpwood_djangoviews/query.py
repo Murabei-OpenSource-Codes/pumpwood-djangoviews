@@ -5,7 +5,8 @@ from pumpwood_communication.exceptions import (
     PumpWoodQueryException, PumpWoodNotImplementedError)
 
 
-def filter_by_dict(query_set, filter_dict={}, exclude_dict={}, order_by=[],
+def filter_by_dict(query_set, filter_dict: dict = None,
+                   exclude_dict: dict = None, order_by: list = None,
                    **kwargs):
     """Filter query using list dictonary.
 
@@ -30,6 +31,10 @@ def filter_by_dict(query_set, filter_dict={}, exclude_dict={}, order_by=[],
     Returns:
         Filtered query set.
     """
+    filter_dict = {} if filter_dict is None else filter_dict
+    exclude_dict = {} if exclude_dict is None else exclude_dict
+    order_by = [] if order_by is None else order_by
+
     q_arg = None
     for key, value in filter_dict.items():
         # Check if JSON fields are being fetched and change key to Django

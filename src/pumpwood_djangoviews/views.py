@@ -358,7 +358,7 @@ class PumpWoodRestService(viewsets.ViewSet):
 
             ################################################################
             # Do not display deleted objects if not explicity set to display
-            exclude_dict = request_data.get("exclude_dict", {})
+            exclude_dict = request_data.get("exclude_dict") or {}
             if hasattr(self.service_model, 'deleted'):
                 exclude_dict_keys = exclude_dict.keys()
                 any_delete = False
@@ -429,6 +429,7 @@ class PumpWoodRestService(viewsets.ViewSet):
         """
         try:
             request_data = request.data
+            print('request_data:', request_data)
 
             # Serializer parameters
             fields = request_data.pop("fields", None)
@@ -461,6 +462,7 @@ class PumpWoodRestService(viewsets.ViewSet):
                 context={'request': request}).data)
 
         except TypeError as e:
+            raise e
             raise exceptions.PumpWoodQueryException(
                 message=str(e))
 
