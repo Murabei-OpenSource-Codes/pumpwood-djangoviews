@@ -429,7 +429,6 @@ class PumpWoodRestService(viewsets.ViewSet):
         """
         try:
             request_data = request.data
-            print('request_data:', request_data)
 
             # Serializer parameters
             fields = request_data.pop("fields", None)
