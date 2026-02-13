@@ -27,6 +27,7 @@ from pumpwood_djangoviews.aux.map_django_types import django_map
 from pumpwood_djangoviews.serializers import (
     MicroserviceForeignKeyField, MicroserviceRelatedField,
     LocalForeignKeyField, LocalRelatedField, DynamicFieldsModelSerializer)
+from pumpwood_djangoviews.views.aux import AuxViewReturnBytes
 
 
 def save_serializer_instance(serializer_instance):
@@ -992,6 +993,7 @@ class PumpWoodRestService(viewsets.ViewSet):
             raise exceptions.PumpWoodForbidden(
                 message=message, payload={"action_name": action_name})
 
+        action_information = actions[action_name].action_object.to_dict()
         action = getattr(self.service_model, action_name)
         if pk is None and not action.action_object.is_static_function:
             msg_template = (
@@ -1045,9 +1047,15 @@ class PumpWoodRestService(viewsets.ViewSet):
                     "model_class": self.service_model.__name__.lower(),
                     "type": "action", "pk": pk, "action_name": action_name})
 
-        return Response({
-            'result': result, 'action': action_name,
-            'parameters': parameters, 'object': object_dict})
+        print("action_information:", action_information)
+        print("result:", result)
+        return_type = action_information['return']['type']
+        if return_type != 'bytes':
+            return Response({
+                'result': result, 'action': action_name,
+                'parameters': parameters, 'object': object_dict})
+        else:
+            return AuxViewReturnBytes.run(result=result)
 
     @classmethod
     def cls_fields_options(cls) -> dict:

@@ -37,7 +37,8 @@ setuptools.setup(
         'diskcache>=5.6.3',
         'pumpwood-communication>=2.0',
         'orjson>=3.11.3',
-        'loguru>=0.7.3'
+        'loguru>=0.7.3',
+        "openpyxl>=3.1.5"
     ],
     packages=setuptools.find_packages(where="src"),
     python_requires=">=3.12",
