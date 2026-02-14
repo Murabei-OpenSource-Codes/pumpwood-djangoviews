@@ -1,7 +1,7 @@
 """Auxiliary functions for ."""
-from .bytes_return import AuxViewReturnBytes
+from .action_return import AuxViewActionReturnFile
 
 
 __all__ = [
-    AuxViewReturnBytes
+    AuxViewActionReturnFile
 ]

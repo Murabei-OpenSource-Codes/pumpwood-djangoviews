@@ -69,6 +69,7 @@ import typing
 from datetime import date, datetime
 from typing import cast, Callable
 from pumpwood_communication.exceptions import PumpWoodActionArgsException
+from pumpwood_miscellaneous.type import ActionReturnFile
 
 
 class Action:
@@ -159,30 +160,41 @@ class Action:
 
         def extract_return_type(return_annotation):
             """Extract result type."""
-            resp = {"many": False}
-            if return_annotation == inspect.Parameter.empty:
-                resp["type"] = "Any"
-            elif type(return_annotation) is str:
-                resp["type"] = return_annotation
-            elif isinstance(return_annotation, type):
-                resp["type"] = return_annotation.__name__
-            elif (typing.get_origin(return_annotation) == typing.Literal):
-                resp["type"] = "options"
-                typing_args = typing.get_args(return_annotation)
-                resp["in"] = [
-                    {"value": x, "description": x}
-                    for x in typing_args]
-            elif typing.get_origin(return_annotation) is list:
-                resp["many"] = True
+            is_many = (
+                typing.get_origin(return_annotation) in (list, typing.List))
+            if is_many:
                 list_args = typing.get_args(return_annotation)
                 if len(list_args) == 0:
-                    resp["type"] = "Any"
-                else:
-                    resp["type"] = list_args[0].__name__
-            else:
-                resp["type"] = str(return_annotation).replace(
-                    'typing.', '')
-            return resp
+                    return {"many": True, "type": "Any"}
+                return_annotation = list_args[0]
+
+            if return_annotation in (inspect.Parameter.empty, typing.Any):
+                return {"many": is_many, "type": "Any"}
+
+            if type(return_annotation) is str:
+                return {"many": is_many, "type": return_annotation}
+
+            is_actionreturnfile = (
+                inspect.isclass(return_annotation) and
+                issubclass(return_annotation, ActionReturnFile))
+            if is_actionreturnfile:
+                return {"many": is_many, "type": 'file'}
+
+            if isinstance(return_annotation, type):
+                return {"many": is_many, "type": return_annotation.__name__}
+
+            if (typing.get_origin(return_annotation) == typing.Literal):
+                typing_args = typing.get_args(return_annotation)
+                in_options = [
+                    {"value": x, "description": str(x)}
+                    for x in typing_args]
+                return {"many": is_many, "type": 'options', 'in': in_options}
+
+            return_type = str(return_annotation).replace('typing.', '')
+            return {
+                "many": is_many,
+                "type": return_type
+            }
 
         # Getting function parameters hint
         signature = inspect.signature(func)
