@@ -340,6 +340,8 @@ class MicroserviceRelatedField(serializers.Field):
             fields (List[str]):
                 Fields that will be returned from related model, if not set
                 default list fields will be returned.
+            help_text (str):
+                Help text associated with related field.
             **kwargs:
                 Other keywords for field.
         """
@@ -429,7 +431,8 @@ class MicroserviceRelatedField(serializers.Field):
         return {
             'model_class': self.model_class, 'many': True,
             'pk_field': self.pk_field, 'order_by': self.order_by,
-            'foreign_key': self.foreign_key, 'fields': self.fields}
+            'foreign_key': self.foreign_key, 'fields': self.fields,
+            'help_text': self.help_text}
 
 
 ##################################

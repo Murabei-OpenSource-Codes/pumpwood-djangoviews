@@ -125,7 +125,7 @@ class Action:
                 validation. Role must be in `['can_delete', 'can_delete_file',
                 'can_delete_many', 'can_list', 'can_list_without_pag',
                 'can_retrieve', 'can_retrieve_file', 'can_run_actions',
-                'can_save', 'authenticated', 'default']`.
+                'can_save', 'authenticated', 'default', 'is_superuser']`.
         """
         def extract_param_type(param) -> None:
             """Extract paramter type."""

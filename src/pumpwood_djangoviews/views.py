@@ -358,7 +358,7 @@ class PumpWoodRestService(viewsets.ViewSet):
 
             ################################################################
             # Do not display deleted objects if not explicity set to display
-            exclude_dict = request_data.get("exclude_dict", {})
+            exclude_dict = request_data.get("exclude_dict") or {}
             if hasattr(self.service_model, 'deleted'):
                 exclude_dict_keys = exclude_dict.keys()
                 any_delete = False
@@ -461,6 +461,7 @@ class PumpWoodRestService(viewsets.ViewSet):
                 context={'request': request}).data)
 
         except TypeError as e:
+            raise e
             raise exceptions.PumpWoodQueryException(
                 message=str(e))
 
@@ -1318,6 +1319,7 @@ class PumpWoodRestService(viewsets.ViewSet):
         for key, item in microservice_related_dict.items():
             tag = translation_tag_template.format(
                 model_class=model_class, field=key)
+            help_text = getattr(item, 'help_text', '')
 
             column__verbose = _.t(
                 sentence=key, tag=tag + "__column")
