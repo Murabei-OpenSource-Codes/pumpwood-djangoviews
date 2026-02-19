@@ -1,67 +1,4 @@
-"""
-Define actions decorator.
-
-Define action decorator that can be used to expose function at execute
-action pumpwood end-points.
-
-Example of using the decorator to expose function to end-point:
-```python
-[...]
-
-class ExampleModel(models.Model):
-    STATUS = (
-        ("inactive", "Archived"),
-        ("dev", "Development"),
-        ("homolog", "Homologation"),
-        ("production", "Production"),
-    )
-
-    status = models.CharField(
-        choices=STATUS, max_length=15,
-        verbose_name="Status",
-        help_text="Status")
-    description = models.CharField(
-        null=False, max_length=100, unique=True,
-        verbose_name="Description",
-        help_text="Dashboard description")
-    notes = models.TextField(
-        null=False, default="", blank=True,
-        verbose_name="Notes",
-        help_text="A long description of the dashboard")
-    dimensions = models.JSONField(
-        encoder=PumpWoodJSONEncoder, null=False, default=dict,
-        blank=True,
-        verbose_name="Dimentions",
-        help_text="Key/Value Dimentions")
-
-    @action(info='Expose an action associated with an object')
-    # It is important to use the type tips to correctly convert the
-    # request payload to correct python types
-    def object_action(self, string_arg: str = None, int_arg: int) -> List[str]:
-
-        [...]
-
-    @classmethod
-    @action(info='Expose a classmethod')
-    def class_method(cls, list_of_dict_arg: List[dict]) -> bool:
-        # Class method will not receive pk when running execute_action
-        [...]
-
-    @action(info='Pass the auth_header as argument to function.',
-            auth_header="auth_header")
-    # Auth header will be passed to function as argument, it can be used to
-    # impersonate user using PumpWoodMicroserive.
-    def pass_auth_header_to_function(self, list_of_dict_arg: List[dict],
-                                     auth_header: dict) -> str:
-        # Passing auth header to microservice object will impersonate
-        # user.
-        related_fields_fetched = microservice.list(
-            model_class="MicroserviceRelatedModel",
-            filter_dict={"fk_field": self.id},
-            auth_header=auth_header)
-        [...]
-```
-"""
+"""Module to define actions to expose functions using APIs."""
 import inspect
 import textwrap
 import pandas as pd
@@ -69,7 +6,7 @@ import typing
 from datetime import date, datetime
 from typing import cast, Callable
 from pumpwood_communication.exceptions import PumpWoodActionArgsException
-from pumpwood_miscellaneous.type import ActionReturnFile
+from pumpwood_communication.type import ActionReturnFile
 
 
 class Action:

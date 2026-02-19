@@ -2,8 +2,8 @@
 from typing import Literal, Any
 from django.http import HttpResponse
 from pumpwood_communication.exceptions import PumpWoodNotImplementedError
+from pumpwood_communication.type import ActionReturnFile
 from werkzeug.utils import secure_filename
-from pumpwood_miscellaneous.type import ActionReturnFile
 
 
 class AuxViewActionReturnFile:
