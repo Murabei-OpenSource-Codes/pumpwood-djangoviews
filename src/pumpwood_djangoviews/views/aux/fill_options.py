@@ -13,9 +13,9 @@ from pumpwood_djangoviews.serializers import (
     MicroserviceForeignKeyField, MicroserviceRelatedField,
     LocalForeignKeyField, LocalRelatedField)
 from pumpwood_communication.type import (
-    MISSING, AUTOINCREMENT, NOW, TODAY, PUMPWOOD_PK, ColumnInfo, ColumnExtraInfo,
-    FileColumnExtraInfo, OptionsColumnExtraInfo, PumpwoodMissingType,
-    PrimaryKeyExtraInfo)
+    MISSING, AUTOINCREMENT, NOW, TODAY, PUMPWOOD_PK, ColumnInfo,
+    ColumnExtraInfo, FileColumnExtraInfo, OptionsColumnExtraInfo,
+    PumpwoodMissingType, PrimaryKeyExtraInfo)
 
 
 class AuxFillOptions:
