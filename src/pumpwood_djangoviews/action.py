@@ -1,67 +1,4 @@
-"""
-Define actions decorator.
-
-Define action decorator that can be used to expose function at execute
-action pumpwood end-points.
-
-Example of using the decorator to expose function to end-point:
-```python
-[...]
-
-class ExampleModel(models.Model):
-    STATUS = (
-        ("inactive", "Archived"),
-        ("dev", "Development"),
-        ("homolog", "Homologation"),
-        ("production", "Production"),
-    )
-
-    status = models.CharField(
-        choices=STATUS, max_length=15,
-        verbose_name="Status",
-        help_text="Status")
-    description = models.CharField(
-        null=False, max_length=100, unique=True,
-        verbose_name="Description",
-        help_text="Dashboard description")
-    notes = models.TextField(
-        null=False, default="", blank=True,
-        verbose_name="Notes",
-        help_text="A long description of the dashboard")
-    dimensions = models.JSONField(
-        encoder=PumpWoodJSONEncoder, null=False, default=dict,
-        blank=True,
-        verbose_name="Dimentions",
-        help_text="Key/Value Dimentions")
-
-    @action(info='Expose an action associated with an object')
-    # It is important to use the type tips to correctly convert the
-    # request payload to correct python types
-    def object_action(self, string_arg: str = None, int_arg: int) -> List[str]:
-
-        [...]
-
-    @classmethod
-    @action(info='Expose a classmethod')
-    def class_method(cls, list_of_dict_arg: List[dict]) -> bool:
-        # Class method will not receive pk when running execute_action
-        [...]
-
-    @action(info='Pass the auth_header as argument to function.',
-            auth_header="auth_header")
-    # Auth header will be passed to function as argument, it can be used to
-    # impersonate user using PumpWoodMicroserive.
-    def pass_auth_header_to_function(self, list_of_dict_arg: List[dict],
-                                     auth_header: dict) -> str:
-        # Passing auth header to microservice object will impersonate
-        # user.
-        related_fields_fetched = microservice.list(
-            model_class="MicroserviceRelatedModel",
-            filter_dict={"fk_field": self.id},
-            auth_header=auth_header)
-        [...]
-```
-"""
+"""Module to define actions to expose functions using APIs."""
 import inspect
 import textwrap
 import pandas as pd
@@ -69,6 +6,7 @@ import typing
 from datetime import date, datetime
 from typing import cast, Callable
 from pumpwood_communication.exceptions import PumpWoodActionArgsException
+from pumpwood_communication.type import ActionReturnFile
 
 
 class Action:
@@ -159,30 +97,41 @@ class Action:
 
         def extract_return_type(return_annotation):
             """Extract result type."""
-            resp = {"many": False}
-            if return_annotation == inspect.Parameter.empty:
-                resp["type"] = "Any"
-            elif type(return_annotation) is str:
-                resp["type"] = return_annotation
-            elif isinstance(return_annotation, type):
-                resp["type"] = return_annotation.__name__
-            elif (typing.get_origin(return_annotation) == typing.Literal):
-                resp["type"] = "options"
-                typing_args = typing.get_args(return_annotation)
-                resp["in"] = [
-                    {"value": x, "description": x}
-                    for x in typing_args]
-            elif typing.get_origin(return_annotation) is list:
-                resp["many"] = True
+            is_many = (
+                typing.get_origin(return_annotation) in (list, typing.List))
+            if is_many:
                 list_args = typing.get_args(return_annotation)
                 if len(list_args) == 0:
-                    resp["type"] = "Any"
-                else:
-                    resp["type"] = list_args[0].__name__
-            else:
-                resp["type"] = str(return_annotation).replace(
-                    'typing.', '')
-            return resp
+                    return {"many": True, "type": "Any"}
+                return_annotation = list_args[0]
+
+            if return_annotation in (inspect.Parameter.empty, typing.Any):
+                return {"many": is_many, "type": "Any"}
+
+            if type(return_annotation) is str:
+                return {"many": is_many, "type": return_annotation}
+
+            is_actionreturnfile = (
+                inspect.isclass(return_annotation) and
+                issubclass(return_annotation, ActionReturnFile))
+            if is_actionreturnfile:
+                return {"many": is_many, "type": 'file'}
+
+            if isinstance(return_annotation, type):
+                return {"many": is_many, "type": return_annotation.__name__}
+
+            if (typing.get_origin(return_annotation) == typing.Literal):
+                typing_args = typing.get_args(return_annotation)
+                in_options = [
+                    {"value": x, "description": str(x)}
+                    for x in typing_args]
+                return {"many": is_many, "type": 'options', 'in': in_options}
+
+            return_type = str(return_annotation).replace('typing.', '')
+            return {
+                "many": is_many,
+                "type": return_type
+            }
 
         # Getting function parameters hint
         signature = inspect.signature(func)

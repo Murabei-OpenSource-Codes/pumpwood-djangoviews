@@ -9,10 +9,9 @@ import datetime
 import pumpwood_djangoauth.i8n.translate as _
 import copy
 from io import BytesIO
-from typing import List, Union
+from typing import List, Union, Literal
 from django.db import models
 from django.http import HttpResponse
-from django.db.models.fields import NOT_PROVIDED
 from django.db.models.fields.files import FieldFile
 from rest_framework import viewsets, status
 from rest_framework.response import Response
@@ -23,10 +22,9 @@ from pumpwood_communication.microservices import PumpWoodMicroService
 from pumpwood_djangoviews.rest import PumpwoodJSONRenderer
 from pumpwood_djangoviews.query import filter_by_dict, aggregate_by_dict
 from pumpwood_djangoviews.action import load_action_parameters
-from pumpwood_djangoviews.aux.map_django_types import django_map
-from pumpwood_djangoviews.serializers import (
-    MicroserviceForeignKeyField, MicroserviceRelatedField,
-    LocalForeignKeyField, LocalRelatedField, DynamicFieldsModelSerializer)
+from pumpwood_djangoviews.serializers import DynamicFieldsModelSerializer
+from pumpwood_djangoviews.views.aux import AuxViewActionReturnFile
+from pumpwood_djangoviews.views.aux import AuxFillOptions
 
 
 def save_serializer_instance(serializer_instance):
@@ -1045,12 +1043,17 @@ class PumpWoodRestService(viewsets.ViewSet):
                     "model_class": self.service_model.__name__.lower(),
                     "type": "action", "pk": pk, "action_name": action_name})
 
+        # Treat special returns that can not be JSON
+        if AuxViewActionReturnFile.can_treat(action_result=result):
+            return AuxViewActionReturnFile.run(action_result=result)
+
         return Response({
             'result': result, 'action': action_name,
             'parameters': parameters, 'object': object_dict})
 
     @classmethod
-    def cls_fields_options(cls) -> dict:
+    def cls_fields_options(cls,
+                           user_type: Literal['api', 'gui'] = 'api') -> dict:
         """Return field options using serializer.
 
         Args:
@@ -1090,256 +1093,9 @@ class PumpWoodRestService(viewsets.ViewSet):
                     database, for save end-points use this value to
                     modify the object.
         """
-        fields = cls.service_model._meta.get_fields()
-        dict_fields = {}
-        for f in fields:
-            is_relation = getattr(f, "is_relation", False)
-            primary_key = getattr(f, "primary_key", False)
-            if not is_relation or primary_key:
-                dict_fields[f.column] = f
-
-        model_class = cls.service_model.__name__
-        translation_tag_template = "{model_class}__fields__{field}"
-
-        # Get read-only fields from serializer
-        read_only_fields = getattr(cls.serializer.Meta, "read_only_fields", [])
-
-        # Get field serializers
-        serializer_fields = cls.serializer(
-            foreign_key_fields=True, related_fields=True).fields
-
-        # Get serializers associated with FKs and related models
-        microservice_fk_dict = {}
-        microservice_related_dict = {}
-
-        all_info = {}
-        primary_keys = []
-        for field_name, field_serializer in serializer_fields.items():
-            ################################################################
-            # Do not create relations between models in search description #
-            is_microservice_fk = isinstance(
-                field_serializer, MicroserviceForeignKeyField)
-            is_local_fk = isinstance(
-                field_serializer, LocalForeignKeyField)
-            if is_microservice_fk or is_local_fk:
-                field_key = field_serializer.get_fields_options_key()
-                microservice_fk_dict[field_key] = field_serializer
-
-            is_microservice_related = isinstance(
-                field_serializer, MicroserviceRelatedField)
-            is_local_related = isinstance(
-                field_serializer, LocalRelatedField)
-            if is_microservice_related or is_local_related:
-                field_key = field_serializer.get_fields_options_key()
-                microservice_related_dict[field_key] = field_serializer
-
-            f = dict_fields.get(field_serializer.source)
-            if f is None:
-                continue
-            ################################################################
-
-            column_info = {}
-
-            # Getting correspondent simple type
-            column_type = f.get_internal_type()
-            python_type = django_map.get(column_type)
-            if python_type is None:
-                msg = (
-                    "Type [{column_type}] not implemented in map dictionary "
-                    "django type -> python type")
-                raise NotImplementedError(
-                    msg.format(column_type=column_type))
-
-            # Getting default value
-            default = None
-            f_default = getattr(f, 'default', None)
-            if f_default != NOT_PROVIDED and f_default is not None:
-                if callable(f_default):
-                    default = f_default()
-                else:
-                    default = f_default
-
-            primary_key = getattr(f, "primary_key", False)
-            help_text = str(getattr(f, "help_text", ""))
-            db_index = getattr(f, "db_index", False)
-            unique = getattr(f, "unique", False)
-
-            tag = translation_tag_template.format(
-                model_class=model_class, field=f.column)
-            column__verbose = _.t(
-                sentence=f.column, tag=tag + "__column")
-            help_text__verbose = _.t(
-                sentence=help_text, tag=tag + "__help_text")
-            column_info = {
-                'primary_key': primary_key,
-                "column": f.column,
-                "column__verbose": column__verbose,
-                "help_text": help_text,
-                "help_text__verbose": help_text__verbose,
-                "type": python_type,
-                "nullable": f.null,
-                "default": default,
-                "indexed": db_index or primary_key,
-                "unique": unique,
-                "read_only": (
-                    (f.column in read_only_fields) or
-                    (field_name == 'id')
-                ), "extra_info": {}}
-
-            # Get choice options if available
-            choices = getattr(f, "choices", None)
-            if choices is not None:
-                column_info["type"] = "options"
-                in_list = {}
-                for choice in choices:
-                    description = _.t(
-                        sentence=choice[1], tag=tag + "__choices")
-                    in_list[choice[0]] = {
-                        "description": choice[1],
-                        "description__verbose": description,
-                        "value": choice[0]}
-                column_info["in"] = in_list
-
-            if f.column == "id":
-                column_info["default"] = "#autoincrement#"
-                column_info["doc_string"] = "Auto increment primary key"
-
-            # Set auto-increment for primary keys
-            if primary_key:
-                primary_keys.append(column_info["column"])
-
-            # Adjust type if file
-            file_field = cls.file_fields.get(f.column)
-            if file_field is not None:
-                column_info["type"] = "file"
-                column_info["extra_info"] = {
-                    "permited_file_types": file_field}
-            all_info[f.column] = column_info
-
-        #################################
-        # Adding primary key definition #
-        if len(primary_keys) == 1:
-            column = "pk"
-            help_text = "table primary key"
-            tag = translation_tag_template.format(
-                model_class=model_class, field=column)
-            column__verbose = _.t(
-                sentence=column, tag=tag + "__column")
-            help_text__verbose = _.t(
-                sentence=help_text, tag=tag + "__help_text")
-
-            all_info["pk"] = {
-                "primary_key": True,
-                "column": primary_keys,
-                "column__verbose": column__verbose,
-                "help_text": help_text,
-                "help_text__verbose": help_text__verbose,
-                "type": "#autoincrement#",
-                "nullable": False,
-                "read_only": True,
-                "default": "#autoincrement#",
-                "unique": True,
-                "partition": None}
-        else:
-            column = "pk"
-            help_text = "base64 encoded json dictionary"
-            tag = translation_tag_template.format(
-                model_class=model_class, field=column)
-            help_text__verbose = _.t(
-                sentence=help_text, tag=tag + "__help_text")
-            column__verbose = [
-                _.t(sentence=x, tag=tag + "__column")
-                for x in cls._primary_keys]
-
-            all_info["pk"] = {
-                "primary_key": True,
-                "column": primary_keys,
-                "column__verbose": column__verbose,
-                "help_text": help_text,
-                "help_text__verbose": help_text__verbose,
-                "type": "str",
-                "nullable": False,
-                "read_only": True,
-                "default": None,
-                "unique": True,
-                # TODO: Add partition information
-                "partition": None}
-
-        #############################################
-        # Adding field description for foreign keys #
-        for key, item in microservice_fk_dict.items():
-            column = getattr(cls.service_model, key, None)
-            if column is None:
-                msg = (
-                    "Foreign Key [{key}] was not found as model_class "
-                    "[{model_class}] fields")
-                raise exceptions.PumpWoodOtherException(
-                    message=msg,
-                    payload={"key": key, "model_class": model_class})
-
-            tag = translation_tag_template.format(
-                model_class=model_class, field=key)
-
-            primary_key = getattr(column.field, "primary_key", False)
-            help_text = str(getattr(column.field, "help_text", ""))
-            db_index = getattr(column.field, "db_index", False)
-            unique = getattr(column.field, "unique", False)
-            null = getattr(column.field, "null", False)
-
-            # Getting default value
-            default = None
-            f_default = getattr(f, 'default', None)
-            if f_default != NOT_PROVIDED and f_default is not None:
-                if callable(f_default):
-                    default = f_default()
-                else:
-                    default = f_default
-
-            column__verbose = _.t(
-                sentence=key, tag=tag + "__column")
-            help_text__verbose = _.t(
-                sentence=help_text, tag=tag + "__help_text")
-            column_info = {
-                'primary_key': primary_key,
-                "column": key,
-                'column__verbose': column__verbose,
-                "help_text": help_text,
-                'help_text__verbose': help_text__verbose,
-                "type": "foreign_key",
-                "nullable": null,
-                "default": default,
-                "indexed": db_index or primary_key,
-                "unique": unique,
-                "read_only": key in read_only_fields,
-                "extra_info": item.to_dict()}
-            all_info[key] = column_info
-
-        #############################################
-        # Adding field description for foreign keys #
-        for key, item in microservice_related_dict.items():
-            tag = translation_tag_template.format(
-                model_class=model_class, field=key)
-            help_text = getattr(item, 'help_text', '')
-
-            column__verbose = _.t(
-                sentence=key, tag=tag + "__column")
-            help_text__verbose = _.t(
-                sentence=help_text, tag=tag + "__help_text")
-            column_info = {
-                'primary_key': False,
-                "column": key,
-                'column__verbose': column__verbose,
-                "help_text": help_text,
-                'help_text__verbose': help_text__verbose,
-                "type": "related_model",
-                "nullable": True,
-                "default": default,
-                "indexed": False,
-                "unique": False,
-                "read_only": False,
-                "extra_info": item.to_dict()}
-            all_info[key] = column_info
-        return all_info
+        return AuxFillOptions.run(
+            model_class=cls.service_model, serializer=cls.serializer,
+            view_file_fields=cls.file_fields, user_type=user_type)
 
     def search_options(self, request):
         """Return options to be used in list funciton.
@@ -1349,10 +1105,7 @@ class PumpWoodRestService(viewsets.ViewSet):
         return Response(self.cls_fields_options())
 
     def fill_options(self, request):
-        """Return options for object update acording its partial data.
-
-        THIS END-POINT IS DEPRECTED
-        """
+        """Return options for object update acording its partial data."""
         return Response(self.cls_fields_options())
 
     def list_view_options(self, request) -> dict:

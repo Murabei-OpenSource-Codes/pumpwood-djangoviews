@@ -11,7 +11,7 @@ os.chdir(os.path.normpath(os.path.join(os.path.abspath(__file__), os.pardir)))
 
 setuptools.setup(
     name='pumpwood-djangoviews',
-    version='1.5.7',
+    version='1.5.9',
     include_package_data=True,
     license='BSD-3-Clause License',
     description='Assist creating views for Django using Pumpwood pattern.',
@@ -37,7 +37,8 @@ setuptools.setup(
         'diskcache>=5.6.3',
         'pumpwood-communication>=2.0',
         'orjson>=3.11.3',
-        'loguru>=0.7.3'
+        'loguru>=0.7.3',
+        "openpyxl>=3.1.5"
     ],
     packages=setuptools.find_packages(where="src"),
     python_requires=">=3.12",
