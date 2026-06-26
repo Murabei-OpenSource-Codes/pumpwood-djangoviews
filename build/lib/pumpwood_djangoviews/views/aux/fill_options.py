@@ -1,4 +1,13 @@
-"""Module to aux fill_options end-point."""
+"""Auxiliary logic for the fill_options end-point.
+
+Extracts model and serializer metadata for frontend forms and search
+filters. Field defaults are mapped to pumpwood-communication sentinel
+objects and serialized as stable JSON markers (for example ``**now**``
+for ``DateTimeField`` columns with ``auto_now`` or ``auto_now_add``).
+
+Typical usage is through ``PumpWoodRestService.cls_fields_options`` or
+the ``fill_options`` action, both delegating to ``AuxFillOptions.run``.
+"""
 import copy
 import datetime
 import pumpwood_djangoauth.i8n.translate as _
@@ -13,13 +22,20 @@ from pumpwood_djangoviews.serializers import (
     MicroserviceForeignKeyField, MicroserviceRelatedField,
     LocalForeignKeyField, LocalRelatedField)
 from pumpwood_communication.type import (
-    MISSING, AUTOINCREMENT, NOW, TODAY, PUMPWOOD_PK, ColumnInfo, ColumnExtraInfo,
-    FileColumnExtraInfo, OptionsColumnExtraInfo, PumpwoodMissingType,
-    PrimaryKeyExtraInfo)
+    MISSING, AUTOINCREMENT, NOW, TODAY, PUMPWOOD_PK, ColumnInfo,
+    ColumnExtraInfo, FileColumnExtraInfo, OptionsColumnExtraInfo,
+    PumpwoodMissingType, PrimaryKeyExtraInfo, PumpwoodSentinel)
 
 
 class AuxFillOptions:
-    """Help to extract information from fields on model class."""
+    """Build fill_options metadata from a model and its serializer.
+
+    Produces one ``ColumnInfo`` entry per column, including type,
+    nullability, read-only flags, choices, foreign-key extra data,
+    and defaults resolved to ``pumpwood_communication`` sentinels when
+    the Django field uses auto timestamps, auto increment, or has no
+    default value.
+    """
 
     HASH_DICT = {
         "context": "pumpwood_djangoviews",
@@ -34,7 +50,27 @@ class AuxFillOptions:
     def run(cls, model_class: object, serializer,
             view_file_fields: dict = None,
             user_type: Literal['api', 'gui'] = 'api') -> dict[str, ColumnInfo]:
-        """Extract the information."""
+        """Build the fill_options payload for a service model.
+
+        Results are cached under a model-specific hash to reduce repeated
+        serializer introspection. Each column is converted with
+        ``ColumnInfo.to_dict()``, which replaces sentinel objects with
+        their JSON marker strings.
+
+        Args:
+            model_class (object):
+                Django model class exposed by the view service.
+            serializer (type):
+                ``DynamicFieldsModelSerializer`` subclass for the model.
+            view_file_fields (dict | None):
+                Allowed upload types keyed by model field name.
+            user_type (Literal['api', 'gui']):
+                When ``gui``, ``Meta.gui_readonly`` marks fields read-only.
+
+        Returns:
+            dict[str, ColumnInfo]:
+                Column metadata keyed by field name, including ``pk``.
+        """
         model_class_name = cls.get_model_class_name(
             model_class=model_class)
 
@@ -207,8 +243,145 @@ class AuxFillOptions:
         return getattr(column, 'null', False)
 
     @classmethod
+    def _unwrap_default(cls, default):
+        """Unwrap nested DRF default wrapper objects.
+
+        Args:
+            default (Any):
+                Default value from serializer or model field.
+
+        Returns:
+            Any:
+                Inner default after unwrapping known DRF containers.
+        """
+        if default is empty or default is MISSING:
+            return default
+        seen = set()
+        while True:
+            marker = id(default)
+            if marker in seen:
+                break
+            seen.add(marker)
+            inner = getattr(default, 'default', empty)
+            if inner is empty or inner is default:
+                break
+            if not hasattr(default, 'default'):
+                break
+            default = inner
+        return default
+
+    @classmethod
+    def _resolve_datetime_sentinel(cls, column):
+        """Return NOW or TODAY for auto_now model fields.
+
+        Args:
+            column (Field):
+                Django model field.
+
+        Returns:
+            PumpwoodSentinel | None:
+                Sentinel when field uses auto timestamp semantics.
+        """
+        is_auto = (
+            getattr(column, 'auto_now_add', False) or
+            getattr(column, 'auto_now', False))
+        if not is_auto:
+            return None
+        if isinstance(column, models.DateTimeField):
+            return NOW
+        if isinstance(column, models.DateField):
+            return TODAY
+        return None
+
+    @classmethod
+    def _normalize_now_today_callable(cls, default, column=None):
+        """Map now/today callables to pumpwood sentinels.
+
+        Args:
+            default (callable):
+                Callable default from serializer or model field.
+            column (Field):
+                Django model field associated with the default.
+
+        Returns:
+            PumpwoodSentinel | None:
+                Sentinel when default represents now or today.
+        """
+        if default in (timezone.now, datetime.datetime.now):
+            if isinstance(column, models.DateField):
+                if not isinstance(column, models.DateTimeField):
+                    return TODAY
+            return NOW
+        if default is datetime.date.today:
+            return TODAY
+        name = getattr(default, '__name__', None)
+        if name == 'now':
+            if isinstance(column, models.DateField):
+                if not isinstance(column, models.DateTimeField):
+                    return TODAY
+            return NOW
+        if name == 'today':
+            return TODAY
+        return None
+
+    @classmethod
+    def _normalize_callable_default(cls, default, column=None):
+        """Convert callable defaults to JSON-safe sentinel values.
+
+        Args:
+            default (callable):
+                Callable default from serializer or model field.
+            column (Field):
+                Django model field associated with the default.
+
+        Returns:
+            PumpwoodSentinel | Any:
+                Sentinel value or evaluated default.
+        """
+        default = cls._unwrap_default(default)
+        if isinstance(default, PumpwoodSentinel):
+            return default
+        if not callable(default):
+            return default
+
+        sentinel = cls._normalize_now_today_callable(
+            default, column=column)
+        if sentinel is not None:
+            return sentinel
+
+        name = getattr(default, '__name__', None)
+        try:
+            return default()
+        except TypeError:
+            return name or repr(default)
+
+    @classmethod
     def get_default(cls, column, field_data) -> Any | PumpwoodMissingType:
-        """Get default value for the column."""
+        """Resolve the default value for a model column.
+
+        Django auto fields and timestamp defaults are returned as
+        pumpwood sentinels (``NOW``, ``TODAY``, ``AUTOINCREMENT``,
+        ``MISSING``) so ``ColumnInfo.to_dict()`` emits stable JSON
+        markers such as ``**now**``.
+
+        Resolution order:
+        1. ``AUTOINCREMENT`` for auto-created primary key columns.
+        2. ``NOW`` or ``TODAY`` when ``auto_now`` or ``auto_now_add``
+           is set on the model field, before serializer defaults.
+        3. Serializer ``default`` or ``pumpwood_default`` when set.
+        4. Callable or static ``default`` on the model field.
+        5. ``db_default`` when present, otherwise ``MISSING``.
+
+        Args:
+            column (Field):
+                Django model field instance.
+            field_data (Field | None):
+                Matching DRF serializer field, if present.
+
+        Returns:
+            PumpwoodSentinel | Any:
+                Sentinel object or concrete default value.
+        """
         #########################################################
         # Check if there is a default information at serializer #
         ser_field_default = MISSING
@@ -217,7 +390,8 @@ class AuxFillOptions:
             # pumpwood
             pumpwood_read_only = getattr(
                 field_data, 'pumpwood_read_only', False)
-            ser_field_default = getattr(field_data, 'default')
+            ser_field_default = cls._unwrap_default(
+                getattr(field_data, 'default'))
 
             # If dump default is not vaiable
             if ser_field_default is empty:
@@ -227,10 +401,6 @@ class AuxFillOptions:
                 else:
                     ser_field_default = MISSING
 
-        # If a default is set on serializer level, use it
-        if ser_field_default is not MISSING:
-            return ser_field_default
-
         #########################
         # Auto increment fields #
         if column.auto_created:
@@ -238,28 +408,22 @@ class AuxFillOptions:
 
         #####################
         # Datetime/Date now #
-        # For datetime types is is possible to set the defult value as
-        # now using the field attribute
-        is_auto = (
-            getattr(column, 'auto_now_add', False) or
-            getattr(column, 'auto_now', False))
-        if is_auto:
-            # 2. Check the class type to see if it's "Now" or "Today"
-            if isinstance(column, models.DateTimeField):
-                return NOW
-            elif isinstance(column, models.DateField):
-                return TODAY
+        # Model auto_now flags take precedence over serializer defaults.
+        auto_sentinel = cls._resolve_datetime_sentinel(column=column)
+        if auto_sentinel is not None:
+            return auto_sentinel
 
-        # Is is also possible to set defualt as a function
-        is_now = column.default in [
-            timezone.now, datetime.datetime.now]
-        if is_now:
-            return NOW
+        # If a default is set on serializer level, use it
+        if ser_field_default is not MISSING:
+            if callable(ser_field_default) and ser_field_default is not empty:
+                return cls._normalize_callable_default(
+                    ser_field_default, column=column)
+            return ser_field_default
 
-        is_today = column.default in [
-            timezone.now, datetime.datetime.now]
-        if is_today:
-            return TODAY
+        # It is also possible to set default as a function
+        if column.has_default() and callable(column.default):
+            return cls._normalize_callable_default(
+                column.default, column=column)
 
         # Other cases use the value associated
         if column.has_default():

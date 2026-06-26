@@ -1066,7 +1066,11 @@ class PumpWoodRestService(viewsets.ViewSet):
                 field (same as the key).
             - **column__verbose [str]:** Name of the collumns translated
                 using Pumpwood I8s.
-            - **default [str]:** Defult value for column.
+            - **default [str]:** Default for the column. Auto timestamp
+                fields return pumpwood sentinel markers such as
+                ``**now**`` or ``**today**``; auto increment columns
+                return ``**autoincrement**``; fields without a default
+                omit the key or use ``**missing**``.
             - **extra_info [str]:** Extra information for the collumns
                 can be used to pass information about foreign key or
                 related fields.
@@ -1105,7 +1109,12 @@ class PumpWoodRestService(viewsets.ViewSet):
         return Response(self.cls_fields_options())
 
     def fill_options(self, request):
-        """Return options for object update acording its partial data."""
+        """Return field metadata for create and update forms.
+
+        Delegates to ``cls_fields_options``. Each field ``default`` uses
+        pumpwood-communication sentinel strings (for example ``**now**``
+        for ``DateTimeField`` with ``auto_now``).
+        """
         return Response(self.cls_fields_options())
 
     def list_view_options(self, request) -> dict:
@@ -1130,7 +1139,11 @@ class PumpWoodRestService(viewsets.ViewSet):
                     field (same as the key).
                 - **column__verbose [str]:** Name of the collumns translated
                     using Pumpwood I8s.
-                - **default [str]:** Defult value for column.
+                - **default [str]:** Default for the column. Auto timestamp
+                fields return pumpwood sentinel markers such as
+                ``**now**`` or ``**today**``; auto increment columns
+                return ``**autoincrement**``; fields without a default
+                omit the key or use ``**missing**``.
                 - **extra_info [str]:** Extra information for the collumns
                     can be used to pass information about foreign key or
                     related fields.
