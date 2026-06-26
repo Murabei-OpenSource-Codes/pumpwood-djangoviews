@@ -15,3 +15,23 @@ to use
 
 ## Documentation
 For docs, check [doc page](https://murabei-opensource-codes.github.io/pumpwood-djangoviews/pumpwood-djangoviews/src/pumpwood_djangoviews.html).
+
+## fill_options defaults
+
+Views based on ``PumpWoodRestService`` expose ``fill_options`` and
+``cls_fields_options``. Each field description includes a ``default``
+key serialized through ``pumpwood-communication`` sentinel markers:
+
+- ``**missing**`` — no default; the client must supply a value.
+- ``**autoincrement**`` — database-generated primary key.
+- ``**now**`` — server datetime; ``DateTimeField`` with ``auto_now``,
+  ``auto_now_add``, or ``default=timezone.now``.
+- ``**today**`` — server date; ``DateField`` with ``auto_now``,
+  ``auto_now_add``, or ``default=date.today``.
+
+Model ``auto_now`` and ``auto_now_add`` flags take precedence over DRF
+serializer defaults. Callable defaults such as ``timezone.now`` are
+normalized to ``**now**`` instead of being evaluated at request time.
+
+Responses may be cached; clear the fill_options cache or wait for
+``INFO_CACHE_TIMEOUT`` after upgrading this package.
