@@ -1,6 +1,6 @@
 [project]
 name = "pumpwood-djangoviews"
-version = "1.5.12-b.0"
+version = "1.5.13-b.0"
 description = "Assist creating views for Django using Pumpwood pattern."
 readme = "README.md"
 requires-python = ">=3.12"
