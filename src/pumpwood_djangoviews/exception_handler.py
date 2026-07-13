@@ -1,0 +1,4 @@
+"""Re-export Pumpwood Django exception handler."""
+from pumpwood_djangoauth.exception_handler import custom_exception_handler
+
+__all__ = ['custom_exception_handler']

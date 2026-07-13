@@ -10,21 +10,38 @@ the ``fill_options`` action, both delegating to ``AuxFillOptions.run``.
 """
 import copy
 import datetime
-import pumpwood_djangoauth.i8n.translate as _
+from dataclasses import dataclass
+from typing import Literal, Any
 from django.db import models
 from django.utils import timezone
-from typing import Literal, Any
 from rest_framework.fields import empty
-from pumpwood_djangoviews.config import INFO_CACHE_TIMEOUT
 from django.db.models.fields import NOT_PROVIDED
+
+# Pumpwood imports
+from pumpwood_i8n.singletons import pumpwood_i8n
 from pumpwood_communication.cache import default_cache
-from pumpwood_djangoviews.serializers import (
-    MicroserviceForeignKeyField, MicroserviceRelatedField,
-    LocalForeignKeyField, LocalRelatedField)
 from pumpwood_communication.type import (
     MISSING, AUTOINCREMENT, NOW, TODAY, PUMPWOOD_PK, ColumnInfo,
     ColumnExtraInfo, FileColumnExtraInfo, OptionsColumnExtraInfo,
-    PumpwoodMissingType, PrimaryKeyExtraInfo, PumpwoodSentinel)
+    PumpwoodMissingType, PrimaryKeyExtraInfo, PumpwoodSentinel,
+    PumpwoodDataclassMixin)
+from pumpwood_djangoviews.config import INFO_CACHE_EXPIRATION
+from pumpwood_djangoviews.serializers import (
+    MicroserviceForeignKeyField, MicroserviceRelatedField,
+    LocalForeignKeyField, LocalRelatedField)
+
+
+
+@dataclass
+class PumpwoodDjangoViewsFillOptionsCacheKey(PumpwoodDataclassMixin):
+    """Cache key fields for fill_options responses."""
+
+    model_class_name: str
+    """Lowercase name of the service model class."""
+    user_type: Literal['api', 'gui']
+    """Audience that requested the metadata."""
+    context: str = "pumpwood_djangoviews__fill_options"
+    """Disk cache namespace for fill_options payloads."""
 
 
 class AuxFillOptions:
@@ -41,15 +58,16 @@ class AuxFillOptions:
         "context": "pumpwood_djangoviews",
         "end-point": "cls_fields_options",
         "model_class": None}
-    """Base of the hash dict."""
+    """Base hash dict template for legacy fill_options cache keys."""
 
     TRANSLATION_TAG_TEMPLATE = "{model_class}__fields__{field}"
-    """Translation tag for verbose fields."""
+    """Format string for i8n tags on column metadata."""
 
     @classmethod
     def run(cls, model_class: object, serializer,
             view_file_fields: dict = None,
-            user_type: Literal['api', 'gui'] = 'api') -> dict[str, ColumnInfo]:
+            user_type: Literal['api', 'gui'] = 'api'
+            ) -> dict[str, ColumnInfo]:
         """Build the fill_options payload for a service model.
 
         Results are cached under a model-specific hash to reduce repeated
@@ -73,11 +91,12 @@ class AuxFillOptions:
         """
         model_class_name = cls.get_model_class_name(
             model_class=model_class)
+        hash_dict = PumpwoodDjangoViewsFillOptionsCacheKey(
+            model_class_name=model_class_name,
+            user_type=user_type)
 
         # Retrieve local cache if avaiable
-        hash_dict = cls.get_hash_dict(
-            model_class_name=model_class_name)
-        cached_data = cls.fetch_cache(hash_dict=hash_dict)
+        cached_data = default_cache.get(hash_dict=hash_dict)
         if cached_data is not None:
             return cached_data
 
@@ -130,12 +149,23 @@ class AuxFillOptions:
         column_data['pk'] = info_dict
 
         # Set diskcache to reduce calls
-        cls.set_cache(hash_dict=hash_dict, data=column_data)
+        default_cache.set(
+            hash_dict=hash_dict, value=column_data,
+            expire=INFO_CACHE_EXPIRATION)
         return column_data
 
     @classmethod
     def extract_non_relation_fields(cls, model_class) -> dict:
-        """Extract the information."""
+        """Return concrete model fields keyed by database column name.
+
+        Args:
+            model_class (type):
+                Django model class exposed by the view service.
+
+        Returns:
+            dict:
+                Mapping of column name to ``Field`` instances.
+        """
         fields = model_class._meta.get_fields()
         dict_fields = {}
         for f in fields:
@@ -145,12 +175,31 @@ class AuxFillOptions:
 
     @classmethod
     def get_model_class_name(cls, model_class) -> str:
-        """Return model_class name."""
+        """Return the lowercase model class name used in cache keys.
+
+        Args:
+            model_class (type):
+                Django model class exposed by the view service.
+
+        Returns:
+            str:
+                Lowercase ``__name__`` of the model class.
+        """
         return model_class.__name__.lower()
 
     @classmethod
     def get_serializer_info(cls, serializer) -> dict:
-        """Return information from serializer."""
+        """Inspect serializer fields and relation metadata.
+
+        Args:
+            serializer (type):
+                ``DynamicFieldsModelSerializer`` subclass for the model.
+
+        Returns:
+            dict:
+                Keys are ``serializer_fields``, ``foreign_keys``,
+                ``related_fields``, and ``gui_readonly``.
+        """
         serializer_obj = serializer(
             foreign_key_fields=True, related_fields=True)
         serializer_fields = serializer_obj.fields
@@ -188,7 +237,18 @@ class AuxFillOptions:
 
     @classmethod
     def get_verbose_tag(cls, model_class_name: str, field_name: str) -> str:
-        """Get verbose tag."""
+        """Build the i8n tag prefix for a model field.
+
+        Args:
+            model_class_name (str):
+                Lowercase model class name.
+            field_name (str):
+                Model or serializer field name.
+
+        Returns:
+            str:
+                Tag used by ``pumpwood_i8n`` for verbose labels.
+        """
         tag = cls.TRANSLATION_TAG_TEMPLATE.format(
             model_class=model_class_name,
             field=field_name)
@@ -196,31 +256,80 @@ class AuxFillOptions:
 
     @classmethod
     def get_hash_dict(cls, model_class_name: str) -> dict:
-        """Get a base hash dict."""
+        """Return a copy of ``HASH_DICT`` bound to a model class.
+
+        Args:
+            model_class_name (str):
+                Lowercase model class name.
+
+        Returns:
+            dict:
+                Hash dict with ``model_class`` set for cache lookup.
+        """
         hash_dict = copy.deepcopy(cls.HASH_DICT)
         hash_dict['model_class'] = model_class_name
         return hash_dict
 
     @classmethod
-    def fetch_cache(cls, hash_dict: str) -> dict[str, ColumnInfo] | None:
-        """Fetch information about the fields from the local cache."""
+    def fetch_cache(cls, hash_dict: dict) -> dict[str, ColumnInfo] | None:
+        """Read fill_options payload from the local disk cache.
+
+        Args:
+            hash_dict (dict):
+                Cache hash dict produced by ``get_hash_dict``.
+
+        Returns:
+            dict[str, ColumnInfo] | None:
+                Cached column metadata, or ``None`` on cache miss.
+        """
         return default_cache.get(hash_dict=hash_dict)
 
     @classmethod
-    def set_cache(cls, hash_dict: str, data: dict[str, ColumnInfo]) -> bool:
-        """Set information about the fields at the local cache."""
+    def set_cache(cls, hash_dict: dict,
+                  data: dict[str, ColumnInfo]) -> bool:
+        """Store fill_options payload in the local disk cache.
+
+        Args:
+            hash_dict (dict):
+                Cache hash dict produced by ``get_hash_dict``.
+            data (dict[str, ColumnInfo]):
+                Column metadata keyed by field name.
+
+        Returns:
+            bool:
+                ``True`` when the value was stored successfully.
+        """
         return default_cache.set(
             hash_dict=hash_dict, value=data,
-            expire=INFO_CACHE_TIMEOUT)
+            expire=INFO_CACHE_EXPIRATION)
 
     @classmethod
     def get_table_partitions(cls, model_class):
-        """Get table partitions from mapper."""
+        """Return partition column names declared on the model.
+
+        Args:
+            model_class (type):
+                Django model class exposed by the view service.
+
+        Returns:
+            list:
+                Value of ``table_partition`` when set, else ``[]``.
+        """
         return getattr(model_class, 'table_partition', [])
 
     @classmethod
     def get_serializer_fields(cls, serializer):
-        """Get serializer fields."""
+        """Return serializer fields and relation maps.
+
+        Args:
+            serializer (type):
+                ``DynamicFieldsModelSerializer`` subclass for the model.
+
+        Returns:
+            dict:
+                Keys are ``serializer_fields``, ``foreign_keys``,
+                ``related_fields``, and ``gui_readonly``.
+        """
         # Create serializer with FK and related to retrieve information
         serializer_obj = serializer(
             foreign_key_fields=True, related_fields=True)
@@ -237,7 +346,20 @@ class AuxFillOptions:
 
     @classmethod
     def get_nullable(cls, column, field_data) -> bool:
-        """Get if column can be considered nullable."""
+        """Return whether the column accepts null values.
+
+        Serializer ``allow_null`` takes precedence over the model field.
+
+        Args:
+            column (Field):
+                Django model field instance.
+            field_data (Field | None):
+                Matching DRF serializer field, if present.
+
+        Returns:
+            bool:
+                ``True`` when null values are allowed.
+        """
         if field_data is not None:
             return getattr(field_data, 'allow_null', False)
         return getattr(column, 'null', False)
@@ -275,7 +397,7 @@ class AuxFillOptions:
         """Return NOW or TODAY for auto_now model fields.
 
         Args:
-            column (Field):
+            column (models.Field):
                 Django model field.
 
         Returns:
@@ -440,7 +562,22 @@ class AuxFillOptions:
     @classmethod
     def get_read_only(cls, column, field_data, gui_readonly,
                       user_type: str = 'api') -> bool:
-        """Get read_only value for the column."""
+        """Return whether the column is read-only for the client.
+
+        Args:
+            column (Field):
+                Django model field instance.
+            field_data (Field | None):
+                Matching DRF serializer field, if present.
+            gui_readonly (list[str]):
+                Field names marked read-only for GUI clients.
+            user_type (str):
+                ``gui`` also applies ``gui_readonly`` restrictions.
+
+        Returns:
+            bool:
+                ``True`` when the field must not be edited.
+        """
         drf_read_only = getattr(
             field_data, 'read_only', False)
         pumpwood_read_only = getattr(
@@ -456,7 +593,23 @@ class AuxFillOptions:
     @classmethod
     def get_type(cls, column_name, column, view_file_fields: dict,
                  foreign_keys: dict) -> str:
-        """Get column type."""
+        """Map a model column to the Pumpwood fill_options type string.
+
+        Args:
+            column_name (str):
+                Model field name.
+            column (Field):
+                Django model field instance.
+            view_file_fields (dict):
+                Allowed upload MIME types keyed by field name.
+            foreign_keys (dict):
+                Foreign-key metadata from the serializer.
+
+        Returns:
+            str:
+                Pumpwood type such as ``str``, ``foreign_key``, or
+                ``options``.
+        """
         # Check for auxiliary data for more information
         temp_view_file_fields = view_file_fields or {}
         file_types = temp_view_file_fields.get(column.name)
@@ -505,75 +658,200 @@ class AuxFillOptions:
             return internal_type
 
     @classmethod
-    def get_help_text(cls, column) -> bool:
-        """Get help text."""
+    def get_help_text(cls, column) -> str:
+        """Return help text for a model column.
+
+        Args:
+            column (Field):
+                Django model field instance.
+
+        Returns:
+            str:
+                Field help text, or the auto-increment help text for
+                ``id``.
+        """
         if column.name == 'id':
             return AUTOINCREMENT.help_text()
         else:
             return str(getattr(column, 'help_text', ""))
 
     @classmethod
-    def get_column_name_verbose(cls, verbose_tag, column_name) -> str:
-        """Get column name verbose."""
-        return _.t(sentence=column_name, tag=verbose_tag + "__column")
+    def get_column_name_verbose(cls, verbose_tag: str,
+                                column_name: str) -> str:
+        """Return translated column label for the frontend.
+
+        Args:
+            verbose_tag (str):
+                i8n tag prefix for the field.
+            column_name (str):
+                Raw column name used as translation sentence.
+
+        Returns:
+            str:
+                Translated column label.
+        """
+        sentence = column_name
+        tag = verbose_tag + "__column"
+        return pumpwood_i8n.t(sentence=sentence, tag=tag)
 
     @classmethod
     def get_help_text_verbose(cls, verbose_tag, help_text) -> str:
-        """Get help text name verbose."""
-        return _.t(sentence=help_text, tag=verbose_tag + "__help_text")
+        """Return translated help text for the frontend.
+
+        Args:
+            verbose_tag (str):
+                i8n tag prefix for the field.
+            help_text (str):
+                Raw help text used as translation sentence.
+
+        Returns:
+            str:
+                Translated help text.
+        """
+        sentence = help_text
+        tag = verbose_tag + "__help_text"
+        return pumpwood_i8n.t(sentence=sentence, tag=tag)
 
     @classmethod
     def get_column_name(cls, column) -> str:
-        """Get column name verbose."""
+        """Return the database column name.
+
+        Args:
+            column (Field):
+                Django model field instance.
+
+        Returns:
+            str:
+                ``column.name`` value.
+        """
         return column.name
 
     @classmethod
-    def get_indexed(cls, column) -> str:
-        """Get column name verbose."""
+    def get_indexed(cls, column) -> bool:
+        """Return whether the column has a database index.
+
+        Args:
+            column (Field):
+                Django model field instance.
+
+        Returns:
+            bool:
+                Value of ``db_index`` when present.
+        """
         is_indexed = getattr(column, 'db_index', False)
         return is_indexed
 
     @classmethod
     def get_primary_key(cls, column) -> bool:
-        """Get primary key."""
+        """Return whether the column is a primary key.
+
+        Args:
+            column (Field):
+                Django model field instance.
+
+        Returns:
+            bool:
+                ``True`` when ``primary_key`` is set on the field.
+        """
         return getattr(column, 'primary_key', False)
 
     @classmethod
     def get_unique(cls, column) -> bool:
-        """Get unique."""
+        """Return whether the column is unique.
+
+        Primary key columns are treated as unique.
+
+        Args:
+            column (Field):
+                Django model field instance.
+
+        Returns:
+            bool:
+                ``True`` when the field is unique or a primary key.
+        """
         is_unique = getattr(column, 'unique', False)
         is_pk = getattr(column, 'primary_key', False)
         return is_unique or is_pk
 
     @classmethod
     def _build_options_data(cls, column, verbose_tag) -> dict:
-        """Return the options associated with the field."""
-        choices = getattr(column, 'choices', None)
+        """Build choice metadata for options-type columns.
 
+        Args:
+            column (Field):
+                Django model field with ``choices`` defined.
+            verbose_tag (str):
+                i8n tag prefix for the field.
+
+        Returns:
+            dict | PumpwoodMissingType:
+                Choice map keyed by lowercase value, or ``MISSING``
+                when the field has no choices.
+        """
+        choices = getattr(column, 'choices', None)
         if choices:
             in_dict = {}
             for value, display_name in choices:
                 key = str(value).lower()
+                description = str(display_name)
+                tag = verbose_tag + "__choice__" + key
+                description__verbose = pumpwood_i8n.t(
+                    sentence=description, tag=tag)
                 in_dict[key] = {
                     "value": value,
-                    "description__verbose": _.t(
-                        sentence=str(display_name),
-                        tag=(verbose_tag + "__choice__" + key)),
-                    "description": str(display_name)
-                }
+                    "description__verbose": description__verbose,
+                    "description": description}
             return in_dict
         return MISSING
 
     @classmethod
-    def get_in(cls, column, verbose_tag) -> bool:
-        """Get unique."""
-        return cls._build_options_data(column=column, verbose_tag=verbose_tag)
+    def get_in(cls, column, verbose_tag) -> dict:
+        """Return serialized choices for an options-type column.
+
+        Args:
+            column (Field):
+                Django model field instance.
+            verbose_tag (str):
+                i8n tag prefix for the field.
+
+        Returns:
+            dict | PumpwoodMissingType:
+                Choice metadata from ``_build_options_data``.
+        """
+        return cls._build_options_data(
+            column=column, verbose_tag=verbose_tag)
 
     @classmethod
     def get_extra_info(cls, column_name: str, type_str: str, column,
                        field_data, view_file_fields, foreign_keys,
                        verbose_tag) -> ColumnExtraInfo:
-        """Get extra info for fields."""
+        """Build type-specific extra metadata for a column.
+
+        Args:
+            column_name (str):
+                Model field name.
+            type_str (str):
+                Pumpwood fill_options type string.
+            column (Field):
+                Django model field instance.
+            field_data (Field | None):
+                Matching DRF serializer field, if present.
+            view_file_fields (dict):
+                Allowed upload MIME types keyed by field name.
+            foreign_keys (dict):
+                Foreign-key metadata from the serializer.
+            verbose_tag (str):
+                i8n tag prefix for the field.
+
+        Returns:
+            ColumnExtraInfo:
+                Foreign-key, options, file, or empty extra info.
+
+        Raises:
+            Exception:
+                When foreign-key or file metadata is missing for the
+                declared column type.
+        """
         if type_str == 'foreign_key':
             foreign_key_field_data = foreign_keys.get(column_name)
             if foreign_key_field_data is not None:
@@ -597,8 +875,17 @@ class AuxFillOptions:
         return {}
 
     @classmethod
-    def get_primary_keys(cls, column_data) -> dict:
-        """Get primary keys columns."""
+    def get_primary_keys(cls, column_data) -> list[str]:
+        """Return names of columns marked as primary keys.
+
+        Args:
+            column_data (dict):
+                Serialized column metadata keyed by field name.
+
+        Returns:
+            list[str]:
+                Field names whose metadata has ``primary_key`` set.
+        """
         # Filter the columns that as marked as primary key
         return [
             key for key, item in column_data.items()
@@ -607,8 +894,32 @@ class AuxFillOptions:
     @classmethod
     def create_field_info_dict(cls, model_class_name, column, field_name: str,
                                field_data, view_file_fields, foreign_keys,
-                               gui_readonly, user_type: str = 'api') -> dict:
-        """Create field info dictonary."""
+                               gui_readonly, user_type: str = 'api'
+                               ) -> dict:
+        """Build serialized ``ColumnInfo`` for one model field.
+
+        Args:
+            model_class_name (str):
+                Lowercase model class name.
+            column (Field):
+                Django model field instance.
+            field_name (str):
+                Model field name.
+            field_data (Field | None):
+                Matching DRF serializer field, if present.
+            view_file_fields (dict):
+                Allowed upload MIME types keyed by field name.
+            foreign_keys (dict):
+                Foreign-key metadata from the serializer.
+            gui_readonly (list[str]):
+                Field names marked read-only for GUI clients.
+            user_type (str):
+                ``gui`` also applies ``gui_readonly`` restrictions.
+
+        Returns:
+            dict:
+                Serialized ``ColumnInfo`` payload for the field.
+        """
         column_name = field_name
         verbose_tag = cls.get_verbose_tag(
             model_class_name=model_class_name,
@@ -662,7 +973,23 @@ class AuxFillOptions:
     @classmethod
     def create_related_field_info_dict(cls, model_class_name, column_name,
                                        field_data, related_info) -> dict:
-        """Create related field info dictonary."""
+        """Build serialized ``ColumnInfo`` for a related-model field.
+
+        Args:
+            model_class_name (str):
+                Lowercase model class name.
+            column_name (str):
+                Related serializer field name.
+            field_data (Field):
+                DRF serializer field for the relation.
+            related_info (dict):
+                Related-model metadata from the serializer.
+
+        Returns:
+            dict:
+                Serialized ``ColumnInfo`` payload with type
+                ``related_model``.
+        """
         verbose_tag = cls.get_verbose_tag(
             model_class_name=model_class_name,
             field_name=column_name)
@@ -693,7 +1020,20 @@ class AuxFillOptions:
     def create_pk_info_dict(cls, model_class_name: str,
                             table_partitions: list[str],
                             column_data: dict) -> dict:
-        """Create primary key column information."""
+        """Build serialized ``ColumnInfo`` for the synthetic ``pk`` field.
+
+        Args:
+            model_class_name (str):
+                Lowercase model class name.
+            table_partitions (list[str]):
+                Partition column names from the model.
+            column_data (dict):
+                Serialized metadata for non-related model fields.
+
+        Returns:
+            dict:
+                Serialized ``ColumnInfo`` payload for ``pk``.
+        """
         column_name = 'pk'
         verbose_tag = cls.get_verbose_tag(
             model_class_name=model_class_name,

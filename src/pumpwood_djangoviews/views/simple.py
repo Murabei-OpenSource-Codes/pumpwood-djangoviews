@@ -3,11 +3,10 @@
 Define base views associated with Pumpwood end-points.
 """
 import os
+import copy
+import datetime
 import pandas as pd
 import simplejson as json
-import datetime
-import pumpwood_djangoauth.i8n.translate as _
-import copy
 from io import BytesIO
 from typing import List, Union, Literal
 from django.db import models
@@ -17,6 +16,7 @@ from rest_framework import viewsets, status
 from rest_framework.response import Response
 from werkzeug.utils import secure_filename
 from pumpwood_miscellaneous.storage import PumpWoodStorage
+from pumpwood_i8n.singletons import pumpwood_i8n
 from pumpwood_communication import exceptions
 from pumpwood_communication.microservices import PumpWoodMicroService
 from pumpwood_djangoviews.rest import PumpwoodJSONRenderer
@@ -921,12 +921,12 @@ class PumpWoodRestService(viewsets.ViewSet):
 
             #########################################################
             # Translate action_name and info to end-user at verbose #
-            action_dict["action_name__verbose"] = _.t(
+            action_dict["action_name__verbose"] = pumpwood_i8n.t(
                 sentence=action_dict["action_name"], tag=tag + "__action_name")
-            action_dict["info__verbose"] = _.t(
+            action_dict["info__verbose"] = pumpwood_i8n.t(
                 sentence=action_dict["info"], tag=tag + "__info")
             for key, item in action_dict["parameters"].items():
-                item["verbose_name"] = _.t(
+                item["verbose_name"] = pumpwood_i8n.t(
                     sentence=key, tag=tag + "__parameters")
             #########################################################
             action_descriptions.append(action_dict)
@@ -1057,7 +1057,11 @@ class PumpWoodRestService(viewsets.ViewSet):
         """Return field options using serializer.
 
         Args:
-            No args.
+            user_type (Literal['api', 'gui']):
+                When ``gui``, ``Meta.gui_readonly`` marks fields read-only.
+            translate (bool):
+                When ``False``, skip Pumpwood I8n lookups. Use during Kong
+                registration to avoid database access at app startup.
 
         Returns:
             Return information for each column to render search filters on
@@ -1253,7 +1257,8 @@ class PumpWoodRestService(viewsets.ViewSet):
                 fieldset_name = fieldset["name"]
                 tag = tag_template.format(
                     model_class=model_class, fieldset_name=fieldset_name)
-                name__verbose = _.t(sentence=fieldset_name, tag=tag)
+                name__verbose = pumpwood_i8n.t(
+                    sentence=fieldset_name, tag=tag)
                 fieldset["name__verbose"] = name__verbose
             return Response({
                 "verbose_field": gui_verbose_field,
